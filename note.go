@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"regexp"
 	"strings"
@@ -12,7 +13,7 @@ func (note *ObsidianNote) Read() (string, error) {
 	body, err := ioutil.ReadFile(note.fpath)
 
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("note.Read() %v: %v", note.fpath, err)
 	}
 
 	return string(body), err
@@ -70,6 +71,10 @@ func (note *ObsidianNote) Write(conn ObsidianDB) error {
 		return err
 	}
 
+	if bodyData == nil {
+		return nil
+	}
+
 	err = conn.InsertFile(fpath)
 	if err != nil {
 		return err
@@ -107,19 +112,26 @@ func (note *ObsidianNote) ExtractData() error {
 	frontMatter, _, err := matter.Parse(strings.NewReader(text))
 
 	if err != nil {
-		return err
+		note.frontMatter = map[string]interface{}{}
+		return nil
 	}
 
 	note.frontMatter = frontMatter
 
 	bounds := GetSectionBounds(text)
+	body := ""
 
-	// get the suffix of text
-	body := text[bounds[1]:]
+	if len(bounds) > 0 {
+		// get the suffix of text
+		body = text[bounds[1]:]
+	}
+
+	tags := FindTags(body)
+
 	extracted := &MarkdownData{
 		Title:     FindTitle(body),
 		Wikilinks: FindWikilinks(body),
-		Tags:      FindTags(body),
+		Tags:      tags,
 		Urls:      FindUrls(body),
 	}
 

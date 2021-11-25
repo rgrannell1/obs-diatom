@@ -87,6 +87,7 @@ func (conn ObsidianDB) InsertFile(fpath string) error {
 
 func (conn ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 	// save tag to table
+
 	for _, tag := range bodyData.Tags {
 		_, err := conn.db.Exec("INSERT INTO tag (tag, file_id) VALUES (?, ?)", tag, fpath)
 		if err != nil {

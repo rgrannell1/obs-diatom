@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -63,13 +64,13 @@ func Diatom(args *DiatomArgs) error {
 		err := note.ExtractData()
 
 		if err != nil {
-			return err
+			return fmt.Errorf("note.ExtractData() %v: %v", fpath, err)
 		}
 
 		err = note.Write(conn)
 
 		if err != nil {
-			return err
+			return fmt.Errorf("note.Write(conn) %v: %v", fpath, err)
 		}
 	}
 
