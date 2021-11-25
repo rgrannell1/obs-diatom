@@ -1,5 +1,7 @@
 package main
 
+import "database/sql"
+
 // Wikilink data-structure
 type Wikilink struct {
 	Reference string
@@ -13,3 +15,29 @@ type MarkdownData struct {
 	Tags      []string
 	Urls      []string
 }
+
+type ObsidianDB struct {
+	db *sql.DB
+}
+
+type DiatomArgs struct {
+	dir string
+}
+
+type ObsidianNote struct {
+	fpath       string
+	frontMatter map[string]interface{}
+	data        *MarkdownData
+}
+
+type ObsidianVault struct {
+	dpath string
+}
+
+const Usage = `
+Usage:
+  diatom (<dpath>)
+
+Description:
+  Foo
+`
