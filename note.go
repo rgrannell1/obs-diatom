@@ -19,8 +19,11 @@ func (note *ObsidianNote) Read() (string, error) {
 	return string(body), err
 }
 
-func FindTitle(body string) string {
-	return ""
+func FindTitle(fpath string) string {
+	title := regexp.MustCompile("-")
+	pair := title.Split(strings.Replace(fpath, ".md", "", 1), -1)
+
+	return pair[len(pair)-1]
 }
 
 // Find WikiLinks
@@ -75,7 +78,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB) error {
 		return nil
 	}
 
-	err = conn.InsertFile(fpath)
+	err = conn.InsertFile(fpath, bodyData.Title)
 	if err != nil {
 		return err
 	}
@@ -129,7 +132,7 @@ func (note *ObsidianNote) ExtractData() error {
 	tags := FindTags(body)
 
 	extracted := &MarkdownData{
-		Title:     FindTitle(body),
+		Title:     FindTitle(note.fpath),
 		Wikilinks: FindWikilinks(body),
 		Tags:      tags,
 		Urls:      FindUrls(body),

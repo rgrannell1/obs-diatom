@@ -79,9 +79,9 @@ func (conn ObsidianDB) CreateTables() error {
 	return nil
 }
 
-func (conn ObsidianDB) InsertFile(fpath string) error {
+func (conn ObsidianDB) InsertFile(fpath string, title string) error {
 	// save file to table
-	_, err := conn.db.Exec("INSERT INTO file (id, title) VALUES (?, ?)", fpath, fpath)
+	_, err := conn.db.Exec("INSERT INTO file (id, title) VALUES (?, ?)", fpath, title)
 	return err
 }
 
