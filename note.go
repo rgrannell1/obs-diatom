@@ -71,7 +71,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB) error {
 
 	err := conn.CreateTables()
 	if err != nil {
-		return err
+		return fmt.Errorf("note.CreateTables() %v: %v", note.fpath, err)
 	}
 
 	if bodyData == nil {

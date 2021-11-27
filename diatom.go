@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -47,6 +48,7 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	db, err := sql.Open("sqlite3", "./diatom.sqlite")
+
 	if err != nil {
 		return err
 	}
@@ -59,20 +61,66 @@ func Diatom(args *DiatomArgs) error {
 		return err
 	}
 
-	for _, fpath := range matches {
-		note := ObsidianNote{fpath, nil, nil}
-		err := note.ExtractData()
+	// job, error channels
+	jobCount := 20
+	jobs := make(chan string)
+	errors := make(chan error, jobCount)
 
-		if err != nil {
-			return fmt.Errorf("note.ExtractData() %v: %v", fpath, err)
-		}
+	// take the channel, read jobs, write metadata to sqlite
+	extractWriteWorker := func(wg *sync.WaitGroup, errors chan<- error) {
+		// before exit, decrement the done count.
 
-		err = note.Write(conn)
+		defer wg.Done()
 
-		if err != nil {
-			return fmt.Errorf("note.Write(conn) %v: %v", fpath, err)
+		for fpath := range jobs {
+			// extract information
+			note := ObsidianNote{fpath, nil, nil}
+			err := note.ExtractData()
+
+			// bail out if extract-data fails
+			if err != nil {
+				errors <- fmt.Errorf("note.ExtractData() %v: %v", fpath, err)
+				return
+			}
+
+			err = note.Write(conn)
+
+			// bail out if write fails
+			if err != nil {
+				errors <- fmt.Errorf("note.Write(conn) %v: %v", fpath, err)
+				return
+			}
+
+			wg.Done()
+			// default case, mark job as done
 		}
 	}
+
+	// distribute among a list of jobs
+	var wg sync.WaitGroup
+	for jobIdx := 0; jobIdx < jobCount; jobIdx++ {
+		go extractWriteWorker(&wg, errors)
+	}
+
+	for _, fpath := range matches {
+		jobs <- fpath
+		wg.Add(1)
+	}
+
+	close(jobs)
+
+	wg.Wait()
+
+	// receive errors and panic if received
+	select {
+	case err := <-errors:
+		panic(err)
+	default:
+	}
+
+	close(errors)
+
+	db.Close()
 
 	return nil
 }
