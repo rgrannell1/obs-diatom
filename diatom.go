@@ -83,14 +83,7 @@ func Diatom(args *DiatomArgs) error {
 				return
 			}
 
-			err = note.Write(conn, errors)
-
-			// bail out if write fails
-			if err != nil {
-				errors <- fmt.Errorf("note.Write(conn) %v: %v", fpath, err)
-				return
-			}
-
+			note.Write(conn, errors)
 			wg.Done()
 			// default case, mark job as done
 		}

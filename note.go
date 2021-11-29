@@ -66,17 +66,18 @@ func FindUrls(body string) []string {
 	return []string{}
 }
 
-func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) error {
+func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	fpath := note.fpath
 	bodyData := note.data
 
 	err := conn.CreateTables()
 	if err != nil {
-		return fmt.Errorf("note.CreateTables() %v: %v", note.fpath, err)
+		errors <- fmt.Errorf("note.CreateTables() %v: %v", note.fpath, err)
+		return
 	}
 
 	if bodyData == nil {
-		return nil
+		return
 	}
 
 	var wg sync.WaitGroup
@@ -119,8 +120,6 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) error {
 	}(errors)
 
 	wg.Wait()
-
-	return nil
 }
 
 func (note *ObsidianNote) ExtractData() error {
