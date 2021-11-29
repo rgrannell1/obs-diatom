@@ -1,7 +1,7 @@
 
 # Diatom
 
-Read and store Obsdiain notes as structured data.
+Read and store Obsidian notes as structured data.
 
 ## Tables
 

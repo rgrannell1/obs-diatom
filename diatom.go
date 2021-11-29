@@ -83,7 +83,7 @@ func Diatom(args *DiatomArgs) error {
 				return
 			}
 
-			err = note.Write(conn)
+			err = note.Write(conn, errors)
 
 			// bail out if write fails
 			if err != nil {

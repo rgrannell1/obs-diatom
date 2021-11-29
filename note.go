@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/gernest/front"
 )
@@ -65,7 +66,7 @@ func FindUrls(body string) []string {
 	return []string{}
 }
 
-func (note *ObsidianNote) Write(conn ObsidianDB) error {
+func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) error {
 	fpath := note.fpath
 	bodyData := note.data
 
@@ -78,25 +79,46 @@ func (note *ObsidianNote) Write(conn ObsidianDB) error {
 		return nil
 	}
 
-	err = conn.InsertFile(fpath, bodyData.Title)
-	if err != nil {
-		return err
-	}
+	var wg sync.WaitGroup
+	wg.Add(4)
 
-	err = conn.InsertTags(bodyData, fpath)
-	if err != nil {
-		return err
-	}
+	go func(errors chan<- error) {
+		err := conn.InsertFile(fpath, bodyData.Title)
+		if err != nil {
+			errors <- err
+		}
 
-	err = conn.InsertUrl(bodyData, fpath)
-	if err != nil {
-		return err
-	}
+		wg.Done()
+	}(errors)
 
-	err = conn.InsertWikilinks(bodyData, fpath)
-	if err != nil {
-		return err
-	}
+	go func(errors chan<- error) {
+		defer wg.Done()
+
+		err := conn.InsertTags(bodyData, fpath)
+		if err != nil {
+			errors <- err
+		}
+	}(errors)
+
+	go func(errors chan<- error) {
+		defer wg.Done()
+
+		err := conn.InsertUrl(bodyData, fpath)
+		if err != nil {
+			errors <- err
+		}
+	}(errors)
+
+	go func(errors chan<- error) {
+		defer wg.Done()
+
+		err := conn.InsertWikilinks(bodyData, fpath)
+		if err != nil {
+			errors <- err
+		}
+	}(errors)
+
+	wg.Wait()
 
 	return nil
 }
