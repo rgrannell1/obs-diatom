@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"hash/fnv"
 	"io/ioutil"
 	"regexp"
 	"strings"
@@ -66,6 +67,12 @@ func FindUrls(body string) []string {
 	return []string{}
 }
 
+func HashContent(text string) uint32 {
+	hash := fnv.New32a()
+	hash.Write([]byte(text))
+	return hash.Sum32()
+}
+
 func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	fpath := note.fpath
 	bodyData := note.data
@@ -84,12 +91,12 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	wg.Add(4)
 
 	go func(errors chan<- error) {
-		err := conn.InsertFile(fpath, bodyData.Title)
-		if err != nil {
-			errors <- err
-		}
+		defer wg.Done()
 
-		wg.Done()
+		err := conn.InsertFile(fpath, bodyData.Title, fmt.Sprint(bodyData.Hash))
+		if err != nil {
+			panic(err)
+		}
 	}(errors)
 
 	go func(errors chan<- error) {
@@ -97,7 +104,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 
 		err := conn.InsertTags(bodyData, fpath)
 		if err != nil {
-			errors <- err
+			panic(err)
 		}
 	}(errors)
 
@@ -106,7 +113,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 
 		err := conn.InsertUrl(bodyData, fpath)
 		if err != nil {
-			errors <- err
+			panic(err)
 		}
 	}(errors)
 
@@ -115,18 +122,32 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 
 		err := conn.InsertWikilinks(bodyData, fpath)
 		if err != nil {
-			errors <- err
+			panic(err)
 		}
 	}(errors)
 
 	wg.Wait()
 }
 
-func (note *ObsidianNote) ExtractData() error {
+func (note *ObsidianNote) GetStoredHash(conn *ObsidianDB) (string, error) {
+	return conn.GetFile(note.fpath)
+}
+
+func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 	text, err := note.Read()
 
 	if err != nil {
-		return err
+		return false, err
+	}
+
+	hash, err := note.GetStoredHash(conn)
+	if err != nil {
+		return false, err
+	}
+
+	currHash := HashContent(text)
+	if hash == fmt.Sprint(currHash) {
+		return true, nil
 	}
 
 	matter := front.NewMatter()
@@ -137,7 +158,7 @@ func (note *ObsidianNote) ExtractData() error {
 
 	if err != nil {
 		note.frontMatter = map[string]interface{}{}
-		return nil
+		return false, nil
 	}
 
 	note.frontMatter = frontMatter
@@ -157,13 +178,14 @@ func (note *ObsidianNote) ExtractData() error {
 		Wikilinks: FindWikilinks(body),
 		Tags:      tags,
 		Urls:      FindUrls(body),
+		Hash:      currHash,
 	}
 
 	note.data = extracted
 
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return false, nil
 }

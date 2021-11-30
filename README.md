@@ -7,7 +7,7 @@ Read and store Obsidian notes as structured data.
 
 Diatom extracts note-information into the following tables:
 
-`file: { id, title }`
+`file: { id, title, hash }`
 
 `tag: { tag, file_id }`
 

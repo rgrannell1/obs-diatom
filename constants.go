@@ -14,30 +14,42 @@ type MarkdownData struct {
 	Wikilinks []*Wikilink
 	Tags      []string
 	Urls      []string
+	Hash      uint32
 }
 
+// Obsidian database structure
 type ObsidianDB struct {
 	db *sql.DB
 }
 
+// CLI Arguments
 type DiatomArgs struct {
 	dir string
 }
 
+// Obsidian note information
 type ObsidianNote struct {
 	fpath       string
 	frontMatter map[string]interface{}
 	data        *MarkdownData
 }
 
+// Obsidian vault data
 type ObsidianVault struct {
 	dpath string
+}
+
+type File struct {
+	id    string
+	title string
+	hash  string
 }
 
 const Usage = `
 Usage:
   diatom (<dpath>)
+	diatom (-h | --help)
 
 Description:
-  Foo
+  Extract structured data from an Obsidian vault.
 `

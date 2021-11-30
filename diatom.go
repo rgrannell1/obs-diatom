@@ -22,6 +22,8 @@ func ReadContent(fpath string) (string, error) {
 	return string(body), err
 }
 
+// Find section bounds in a markdown document, to
+// help find the bounds YAML metadata exists within
 func GetSectionBounds(text string) []int {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	bounds := []int{}
@@ -54,7 +56,6 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	conn := ObsidianDB{db}
-	err = conn.DropTables()
 
 	defer conn.Close()
 	if err != nil {
@@ -62,20 +63,31 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	// job, error channels
-	jobCount := 20
+	workerCount := 20
 	jobs := make(chan string)
-	errors := make(chan error, jobCount)
+	errors := make(chan error, workerCount)
 
 	// take the channel, read jobs, write metadata to sqlite
 	extractWriteWorker := func(wg *sync.WaitGroup, errors chan<- error) {
 		// before exit, decrement the done count.
 
-		defer wg.Done()
-
 		for fpath := range jobs {
 			// extract information
 			note := ObsidianNote{fpath, nil, nil}
-			err := note.ExtractData()
+
+			// only extract hash-data where not null
+			done, err := note.ExtractData(&conn)
+			if err != nil {
+				errors <- err
+				wg.Done()
+				continue
+			}
+
+			// if we have analysed this file-hash
+			if done {
+				wg.Done()
+				continue
+			}
 
 			// bail out if extract-data fails
 			if err != nil {
@@ -91,18 +103,19 @@ func Diatom(args *DiatomArgs) error {
 
 	// distribute among a list of jobs
 	var wg sync.WaitGroup
-	for jobIdx := 0; jobIdx < jobCount; jobIdx++ {
+	wg.Add(len(matches))
+
+	// start workers to process files
+	for workIdx := 0; workIdx < workerCount; workIdx++ {
 		go extractWriteWorker(&wg, errors)
 	}
 
+	// write each file to a channel read by many workers
 	for _, fpath := range matches {
 		jobs <- fpath
-		wg.Add(1)
 	}
 
 	close(jobs)
-
-	wg.Wait()
 
 	// receive errors and panic if received
 	select {
@@ -110,8 +123,11 @@ func Diatom(args *DiatomArgs) error {
 		panic(err)
 	default:
 	}
+	wg.Wait()
 
 	close(errors)
+
+	// analyse as graph
 
 	db.Close()
 
