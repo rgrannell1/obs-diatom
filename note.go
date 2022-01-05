@@ -4,12 +4,19 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/gernest/front"
+	"github.com/gomarkdown/markdown/ast"
+	"github.com/gomarkdown/markdown/parser"
 )
+
+func NewNote(fpath string) ObsidianNote {
+	return ObsidianNote{fpath, nil, nil}
+}
 
 func (note *ObsidianNote) Read() (string, error) {
 	body, err := ioutil.ReadFile(note.fpath)
@@ -196,4 +203,59 @@ func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 	}
 
 	return false, nil
+}
+
+/*
+ * Read and parse note content as markdown
+ */
+func (note *ObsidianNote) Parse() (ast.Node, error) {
+	content, err := os.ReadFile(note.fpath)
+	if err != nil {
+		return nil, err
+	}
+
+	return parser.New().Parse(content), nil
+}
+
+/*
+ * Walk through note and collect interesting information
+ */
+func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
+	doc, err := note.Parse()
+
+	if err != nil {
+		return err
+	}
+
+	tx, err := conn.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	// walk through markdown tree and store interesting information
+	ast.WalkFunc(doc, func(node ast.Node, entering bool) ast.WalkStatus {
+		switch node.(type) {
+		case *ast.CodeBlock:
+			leaf := node.AsLeaf()
+
+			info := string(node.(*ast.CodeBlock).Info)
+
+			if len(info) > 0 && info[0] == '!' {
+				// -- a special code-block containing application-readable data
+
+				yaml := string(leaf.Literal)
+				err = conn.InsertMetadata(tx, note.fpath, info, yaml)
+
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+
+		return ast.GoToNext
+	})
+
+	tx.Commit()
+
+	return nil
 }

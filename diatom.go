@@ -70,7 +70,8 @@ func Diatom(args *DiatomArgs) error {
 
 		for fpath := range jobs {
 			// extract information
-			note := ObsidianNote{fpath, nil, nil}
+			note := NewNote(fpath)
+			note.Walk(&conn)
 
 			// only extract hash-data where not null
 			done, err := note.ExtractData(&conn)

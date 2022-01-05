@@ -86,6 +86,18 @@ func (conn *ObsidianDB) CreateTables() error {
 		return err
 	}
 
+	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS metadata (
+		file_id  TEXT NOT NULL,
+		schema   TEXT NOT NULL,
+		content  TEXT NOT NULL,
+
+		PRIMARY KEY(file_id, schema, content)
+	)`)
+
+	if err != nil {
+		return err
+	}
+
 	err = tx.Commit()
 
 	if err != nil {
@@ -262,4 +274,16 @@ func (conn *ObsidianDB) AddInDegree() error {
 	}
 
 	return nil
+}
+
+func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) error {
+	_, err := tx.Exec(`
+	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
+	`, fpath, info, yaml)
+
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
