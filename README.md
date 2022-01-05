@@ -15,6 +15,8 @@ Diatom extracts note-information into the following tables:
 
 `wikilink: { reference, alias, file_id }`
 
+`metadata { file_id, schema, content }`
+
 ## License
 
 The MIT License
