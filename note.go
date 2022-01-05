@@ -90,6 +90,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	var wg sync.WaitGroup
 	wg.Add(4)
 
+	// insert file
 	go func(errors chan<- error) {
 		defer wg.Done()
 
@@ -99,6 +100,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 		}
 	}(errors)
 
+	// insert tags
 	go func(errors chan<- error) {
 		defer wg.Done()
 
@@ -108,6 +110,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 		}
 	}(errors)
 
+	// insert url
 	go func(errors chan<- error) {
 		defer wg.Done()
 
@@ -117,6 +120,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 		}
 	}(errors)
 
+	// insert wikilink
 	go func(errors chan<- error) {
 		defer wg.Done()
 
@@ -127,6 +131,10 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	}(errors)
 
 	wg.Wait()
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (note *ObsidianNote) GetStoredHash(conn *ObsidianDB) (string, error) {

@@ -4,7 +4,21 @@ import (
 	"database/sql"
 	"path"
 	"strings"
+	"sync"
 )
+
+/*
+ * Construct a database
+ */
+func NewDB(fpath string) (ObsidianDB, error) {
+	db, err := sql.Open("sqlite3", fpath)
+
+	if err != nil {
+		return ObsidianDB{}, err
+	}
+
+	return ObsidianDB{db, &sync.Mutex{}}, nil
+}
 
 // Close a database connection
 func (conn *ObsidianDB) Close() error {
@@ -82,12 +96,6 @@ func (conn *ObsidianDB) CreateTables() error {
 }
 
 func (conn *ObsidianDB) GetFile(fpath string) (string, error) {
-	tx, err := conn.db.Begin()
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback()
-
 	file := File{fpath, "", ""}
 
 	row := conn.db.QueryRow(`SELECT * FROM file WHERE file.id = ?`, fpath)
@@ -117,7 +125,8 @@ func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
 	// save file to table
 	_, err = tx.Exec(`
 	INSERT OR IGNORE INTO file (id, basename, title, hash) VALUES (?, ?, ?, ?)
-	ON CONFLICT (id) DO UPDATE SET title = ?, basename = ?, hash = ?
+	ON CONFLICT (id)
+	DO UPDATE SET title = ?, basename = ?, hash = ?
 	`, fpath, basename, title, hash, title, basename, hash)
 
 	if err != nil {
@@ -185,29 +194,72 @@ func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) er
 	return tx.Commit()
 }
 
-func (conn *ObsidianDB) AddDegree() error {
-	tx, err := conn.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	_, err = tx.Exec(`
-		WITH var_in_degree AS (SELECT count(reference) as in_degree, file_id
+func (conn *ObsidianDB) GetInDegree() (*sql.Rows, error) {
+	return conn.db.Query(`
+		SELECT count(reference) as in_degree, id
 				FROM file
 			LEFT JOIN wikilink ON file.basename = wikilink.reference
-				WHERE file_id IS NOT NULL
-			GROUP BY file_id
-		ORDER BY in_degree DESC)
+				WHERE id IS NOT NULL
+			GROUP BY id
+		ORDER BY in_degree DESC`)
+}
 
-		INSERT INTO file (file_id, in_degree)
-		var_in_degree
-		`)
+func (conn *ObsidianDB) GetOutDegree() (*sql.Rows, error) {
+	return conn.db.Query(``)
+}
+
+/*
+ * Insert a degree row into the database
+ */
+func (conn *ObsidianDB) InsertInDegree(tx *sql.Tx, rows *sql.Rows) error {
+	file := struct {
+		in_degree int
+		id        string
+	}{}
+
+	err := rows.Scan(&file.in_degree, &file.id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+	UPDATE file
+	SET in_degree = ?
+	WHERE id = ?
+	`, file.in_degree, file.id)
+
+	return nil
+}
+
+// Add the file degree
+func (conn *ObsidianDB) AddInDegree() error {
+	rows, err := conn.GetInDegree()
+	if err != nil {
+		return err
+	}
 
 	if err != nil {
 		return err
 	}
 
-	return tx.Commit()
+	tx, _ := conn.db.Begin()
 
+	for rows.Next() {
+		if err = conn.InsertInDegree(tx, rows); err != nil {
+			return err
+		}
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return err
+	}
+
+	err = rows.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

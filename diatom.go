@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"sync"
 
@@ -49,13 +48,11 @@ func Diatom(args *DiatomArgs) error {
 		return err
 	}
 
-	db, err := sql.Open("sqlite3", "./diatom.sqlite")
+	conn, err := NewDB(args.dbPath)
 
 	if err != nil {
 		return err
 	}
-
-	conn := ObsidianDB{db}
 
 	defer conn.Close()
 	if err != nil {
@@ -120,16 +117,20 @@ func Diatom(args *DiatomArgs) error {
 	// receive errors and panic if received
 	select {
 	case err := <-errors:
-		panic(err)
+		return err
 	default:
 	}
+
 	wg.Wait()
 
 	close(errors)
 
-	// analyse as graph
+	err = conn.AddInDegree()
+	if err != nil {
+		return err
+	}
 
-	db.Close()
+	// extract code-blocks
 
 	return nil
 }

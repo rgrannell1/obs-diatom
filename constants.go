@@ -1,6 +1,9 @@
 package main
 
-import "database/sql"
+import (
+	"database/sql"
+	"sync"
+)
 
 // Wikilink data-structure
 type Wikilink struct {
@@ -19,12 +22,14 @@ type MarkdownData struct {
 
 // Obsidian database structure
 type ObsidianDB struct {
-	db *sql.DB
+	db   *sql.DB
+	lock *sync.Mutex
 }
 
 // CLI Arguments
 type DiatomArgs struct {
-	dir string
+	dir    string
+	dbPath string
 }
 
 // Obsidian note information

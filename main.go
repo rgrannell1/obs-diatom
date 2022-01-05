@@ -1,7 +1,10 @@
 package main
 
 import (
+	"log"
+
 	"github.com/docopt/docopt-go"
+	"github.com/google/gops/agent"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -13,10 +16,15 @@ func main() {
 		panic(err)
 	}
 
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal(err)
+	}
+
 	dpath, _ := opts.String("<dpath>")
 
 	args := &DiatomArgs{
-		dir: dpath,
+		dir:    dpath,
+		dbPath: "./diatom.sqlite",
 	}
 
 	err = Diatom(args)
@@ -24,4 +32,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 }
