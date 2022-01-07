@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/docopt/docopt-go"
 	"github.com/google/gops/agent"
@@ -10,7 +12,7 @@ import (
 
 // Main function. Read from Obsidian & save as structured data.
 func main() {
-	opts, err := docopt.ParseDoc(Usage)
+	opts, err := docopt.ParseDoc(Usage())
 
 	if err != nil {
 		panic(err)
@@ -21,10 +23,19 @@ func main() {
 	}
 
 	dpath, _ := opts.String("<dpath>")
+	dbpath, _ := opts.String("<dbpath>")
+
+	home, err := os.UserHomeDir()
+
+	if err != nil {
+		panic(err)
+	}
+
+	dbpath = filepath.Join(home, ".diatom.sqlite")
 
 	args := &DiatomArgs{
 		dir:    dpath,
-		dbPath: "./diatom.sqlite",
+		dbPath: dbpath,
 	}
 
 	err = Diatom(args)
@@ -32,5 +43,4 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 }

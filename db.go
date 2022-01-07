@@ -217,7 +217,12 @@ func (conn *ObsidianDB) GetInDegree() (*sql.Rows, error) {
 }
 
 func (conn *ObsidianDB) GetOutDegree() (*sql.Rows, error) {
-	return conn.db.Query(``)
+	return conn.db.Query(`
+		SELECT count(*) as out_degree, file_id as id
+			FROM wikilink
+		GROUP BY file_id
+		ORDER BY out_degree DESC
+	`)
 }
 
 /*
@@ -239,6 +244,26 @@ func (conn *ObsidianDB) InsertInDegree(tx *sql.Tx, rows *sql.Rows) error {
 	SET in_degree = ?
 	WHERE id = ?
 	`, file.in_degree, file.id)
+
+	return nil
+}
+
+func (conn *ObsidianDB) InsertOutDegree(tx *sql.Tx, rows *sql.Rows) error {
+	file := struct {
+		out_degree int
+		id         string
+	}{}
+
+	err := rows.Scan(&file.out_degree, &file.id)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(`
+	UPDATE file
+	SET out_degree = ?
+	WHERE id = ?
+	`, file.out_degree, file.id)
 
 	return nil
 }
@@ -276,6 +301,42 @@ func (conn *ObsidianDB) AddInDegree() error {
 	return nil
 }
 
+// Add the file degree
+func (conn *ObsidianDB) AddOutDegree() error {
+	rows, err := conn.GetOutDegree()
+	if err != nil {
+		return err
+	}
+
+	if err != nil {
+		return err
+	}
+
+	tx, _ := conn.db.Begin()
+
+	for rows.Next() {
+		if err = conn.InsertOutDegree(tx, rows); err != nil {
+			return err
+		}
+	}
+
+	err = tx.Commit()
+
+	if err != nil {
+		return err
+	}
+
+	err = rows.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+/*
+ * Insert metadata into a database
+ */
 func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) error {
 	_, err := tx.Exec(`
 	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)

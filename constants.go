@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"os"
+	"path/filepath"
 	"sync"
 )
 
@@ -50,11 +52,24 @@ type File struct {
 	hash  string
 }
 
-const Usage = `
-Usage:
-  diatom (<dpath>)
-	diatom (-h | --help)
+func Usage() string {
+	home, err := os.UserHomeDir()
 
-Description:
-  Extract structured data from an Obsidian vault.
-`
+	if err != nil {
+		panic(err)
+	}
+
+	dbPath := filepath.Join(home, ".diatom.sqlite")
+
+	return `
+	Usage:
+		diatom (<dpath>) [--dbpath <dbpath>]
+		diatom (-h | --help)
+
+	Description:
+		Extract structured data from an Obsidian vault.
+
+	Options:
+		--dbpath <dbpath>    the path the diatom sqlite database [default: ` + dbPath + `]
+	`
+}

@@ -49,6 +49,14 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	conn, err := NewDB(args.dbPath)
+	if err != nil {
+		panic(err)
+	}
+
+	err = conn.CreateTables()
+	if err != nil {
+		panic(err)
+	}
 
 	if err != nil {
 		return err
@@ -127,6 +135,11 @@ func Diatom(args *DiatomArgs) error {
 	close(errors)
 
 	err = conn.AddInDegree()
+	if err != nil {
+		return err
+	}
+
+	err = conn.AddOutDegree()
 	if err != nil {
 		return err
 	}
