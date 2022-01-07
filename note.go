@@ -95,7 +95,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(4)
+	wg.Add(5)
 
 	// insert file
 	go func(errors chan<- error) {
@@ -132,6 +132,16 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 		defer wg.Done()
 
 		err := conn.InsertWikilinks(bodyData, fpath)
+		if err != nil {
+			panic(err)
+		}
+	}(errors)
+
+	// insert frontmatter
+	go func(errors chan<- error) {
+		defer wg.Done()
+
+		err := conn.InsertFrontmatter(note.frontMatter, fpath)
 		if err != nil {
 			panic(err)
 		}

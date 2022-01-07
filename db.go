@@ -5,6 +5,8 @@ import (
 	"path"
 	"strings"
 	"sync"
+
+	"gopkg.in/yaml.v2"
 )
 
 /*
@@ -181,6 +183,26 @@ func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return tx.Commit()
+}
+
+func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fpath string) error {
+	tx, err := conn.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	bytes, err := yaml.Marshal(frontmatter)
+
+	_, err = tx.Exec(`
+	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
+	`, fpath, "!frontmatter", string(bytes))
+
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()
