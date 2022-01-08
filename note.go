@@ -155,7 +155,7 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 }
 
 func (note *ObsidianNote) GetStoredHash(conn *ObsidianDB) (string, error) {
-	return conn.GetFile(note.fpath)
+	return conn.GetFileHash(note.fpath)
 }
 
 func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {

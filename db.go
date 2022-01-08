@@ -109,18 +109,20 @@ func (conn *ObsidianDB) CreateTables() error {
 	return nil
 }
 
-func (conn *ObsidianDB) GetFile(fpath string) (string, error) {
-	file := File{fpath, "", ""}
+func (conn *ObsidianDB) GetFileHash(fpath string) (string, error) {
+	var hash string
+	row := conn.db.QueryRow(`SELECT hash FROM file WHERE file.id = ?`, fpath)
 
-	row := conn.db.QueryRow(`SELECT * FROM file WHERE file.id = ?`, fpath)
-	switch err := row.Scan(&file.id, &file.title, &file.hash); err {
-	case sql.ErrNoRows:
-		return "", nil
-	case nil:
-		return file.hash, nil
+	if row == nil {
+		return hash, nil
 	}
 
-	return "", nil
+	err := row.Scan(&hash)
+	if err != nil {
+		return "", nil
+	}
+
+	return hash, nil
 }
 
 func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {

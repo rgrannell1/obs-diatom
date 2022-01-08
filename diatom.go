@@ -131,7 +131,6 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	wg.Wait()
-
 	close(errors)
 
 	err = conn.AddInDegree()
@@ -143,8 +142,6 @@ func Diatom(args *DiatomArgs) error {
 	if err != nil {
 		return err
 	}
-
-	// extract code-blocks
 
 	return nil
 }

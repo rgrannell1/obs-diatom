@@ -67,7 +67,7 @@ func Usage() string {
 		diatom (-h | --help)
 
 	Description:
-		Extract structured data from an Obsidian vault.
+		Extract structured data from an Obsidian vault into a sqlite database.
 
 	Options:
 		--dbpath <dbpath>    the path the diatom sqlite database [default: ` + dbPath + `]

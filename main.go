@@ -1,12 +1,10 @@
 package main
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/docopt/docopt-go"
-	"github.com/google/gops/agent"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -16,10 +14,6 @@ func main() {
 
 	if err != nil {
 		panic(err)
-	}
-
-	if err := agent.Listen(agent.Options{}); err != nil {
-		log.Fatal(err)
 	}
 
 	dpath, _ := opts.String("<dpath>")
