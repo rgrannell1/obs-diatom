@@ -1,4 +1,4 @@
-package main
+package diatom
 
 import (
 	"os"
