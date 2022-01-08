@@ -24,13 +24,13 @@ func NewDB(fpath string) (ObsidianDB, error) {
 
 // Close a database connection
 func (conn *ObsidianDB) Close() error {
-	return conn.db.Close()
+	return conn.Db.Close()
 }
 
 // Create diatom tables in sqlite
 func (conn *ObsidianDB) CreateTables() error {
 	// create a file table
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	defer tx.Rollback()
 
 	if err != nil {
@@ -111,7 +111,7 @@ func (conn *ObsidianDB) CreateTables() error {
 
 func (conn *ObsidianDB) GetFileHash(fpath string) (string, error) {
 	var hash string
-	row := conn.db.QueryRow(`SELECT hash FROM file WHERE file.id = ?`, fpath)
+	row := conn.Db.QueryRow(`SELECT hash FROM file WHERE file.id = ?`, fpath)
 
 	if row == nil {
 		return hash, nil
@@ -126,7 +126,7 @@ func (conn *ObsidianDB) GetFileHash(fpath string) (string, error) {
 }
 
 func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
 }
 
 func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 }
 
 func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
 }
 
 func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fpath string) error {
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fp
 }
 
 func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) error {
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}
@@ -231,7 +231,7 @@ func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) er
 }
 
 func (conn *ObsidianDB) GetInDegree() (*sql.Rows, error) {
-	return conn.db.Query(`
+	return conn.Db.Query(`
 		SELECT count(reference) as in_degree, id
 				FROM file
 			LEFT JOIN wikilink ON file.basename = wikilink.reference
@@ -241,7 +241,7 @@ func (conn *ObsidianDB) GetInDegree() (*sql.Rows, error) {
 }
 
 func (conn *ObsidianDB) GetOutDegree() (*sql.Rows, error) {
-	return conn.db.Query(`
+	return conn.Db.Query(`
 		SELECT count(*) as out_degree, file_id as id
 			FROM wikilink
 		GROUP BY file_id
@@ -303,7 +303,7 @@ func (conn *ObsidianDB) AddInDegree() error {
 		return err
 	}
 
-	tx, _ := conn.db.Begin()
+	tx, _ := conn.Db.Begin()
 
 	for rows.Next() {
 		if err = conn.InsertInDegree(tx, rows); err != nil {
@@ -336,7 +336,7 @@ func (conn *ObsidianDB) AddOutDegree() error {
 		return err
 	}
 
-	tx, _ := conn.db.Begin()
+	tx, _ := conn.Db.Begin()
 
 	for rows.Next() {
 		if err = conn.InsertOutDegree(tx, rows); err != nil {

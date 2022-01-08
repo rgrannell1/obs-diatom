@@ -237,7 +237,7 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 		return err
 	}
 
-	tx, err := conn.db.Begin()
+	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
 	}

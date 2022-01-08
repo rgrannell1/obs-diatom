@@ -24,8 +24,8 @@ type MarkdownData struct {
 
 // Obsidian database structure
 type ObsidianDB struct {
-	db   *sql.DB
-	lock *sync.Mutex
+	Db   *sql.DB
+	Lock *sync.Mutex
 }
 
 // CLI Arguments
