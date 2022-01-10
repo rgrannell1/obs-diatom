@@ -170,6 +170,21 @@ func (note *ObsidianNote) GetStoredHash(conn *ObsidianDB) (string, error) {
 	return conn.GetFileHash(note.fpath)
 }
 
+func (note *ObsidianNote) Changed(text string, conn *ObsidianDB) (bool, error) {
+	hash, err := note.GetStoredHash(conn)
+
+	if err != nil {
+		return false, err
+	}
+
+	currHash := HashContent(text)
+	if hash == fmt.Sprint(currHash) {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 /*
  * Extract information about a note
  */
@@ -180,15 +195,16 @@ func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 		return false, err
 	}
 
-	hash, err := note.GetStoredHash(conn)
+	changed, err := note.Changed(text, conn)
 	if err != nil {
 		return false, err
 	}
 
-	currHash := HashContent(text)
-	if hash == fmt.Sprint(currHash) {
+	if !changed {
 		return true, nil
 	}
+
+	// proceed, and process the note further
 
 	matter := front.NewMatter()
 	matter.Handle("---", front.YAMLHandler)
@@ -203,28 +219,20 @@ func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 
 	note.frontMatter = frontMatter
 
-	bounds := GetSectionBounds(text)
 	body := ""
+	bounds := GetSectionBounds(text)
 
 	if len(bounds) > 0 {
-		// get the suffix of text
+		// get the text after the section bounds
 		body = text[bounds[1]:]
 	}
 
-	tags := FindTags(body)
-
-	extracted := &MarkdownData{
+	note.data = &MarkdownData{
 		Title:     note.FindTitle(),
 		Wikilinks: FindWikilinks(body),
-		Tags:      tags,
+		Tags:      FindTags(body),
 		Urls:      FindUrls(body),
-		Hash:      currHash,
-	}
-
-	note.data = extracted
-
-	if err != nil {
-		return false, err
+		Hash:      HashContent(text),
 	}
 
 	return false, nil
@@ -257,8 +265,8 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 		return err
 	}
 
-	// walk through markdown tree and store interesting information
-	ast.WalkFunc(doc, func(node ast.Node, entering bool) ast.WalkStatus {
+	// traverse markdown document using this function
+	processMarkdownNode := func(node ast.Node, entering bool) ast.WalkStatus {
 		switch node.(type) {
 		case *ast.CodeBlock:
 			leaf := node.AsLeaf()
@@ -269,7 +277,7 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 				// -- a special code-block containing application-readable data
 
 				yaml := string(leaf.Literal)
-				err = conn.InsertMetadata(tx, note.fpath, info, yaml)
+				err := conn.InsertMetadata(tx, note.fpath, info, yaml)
 
 				if err != nil {
 					panic(err)
@@ -278,9 +286,9 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 		}
 
 		return ast.GoToNext
-	})
+	}
 
-	tx.Commit()
-
-	return nil
+	// walk through markdown tree and store interesting information
+	ast.WalkFunc(doc, processMarkdownNode)
+	return tx.Commit()
 }
