@@ -6,23 +6,13 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 
-	"io/ioutil"
 	"strings"
 )
 
-// Read from a file
-func ReadContent(fpath string) (string, error) {
-	body, err := ioutil.ReadFile(fpath)
-
-	if err != nil {
-		return "", err
-	}
-
-	return string(body), err
-}
-
-// Find section bounds in a markdown document, to
-// help find the bounds YAML metadata exists within
+/*
+ * Find section bounds in a markdown document, to
+ * help find the bounds YAML metadata exists within
+ */
 func GetSectionBounds(text string) []int {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	bounds := []int{}
@@ -50,13 +40,10 @@ func Diatom(args *DiatomArgs) error {
 
 	conn, err := NewDB(args.dbPath)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	err = conn.CreateTables()
-	if err != nil {
-		panic(err)
-	}
 
 	if err != nil {
 		return err

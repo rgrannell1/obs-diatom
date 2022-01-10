@@ -14,10 +14,16 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 )
 
+/*
+ * Construct an Obsidian note representation
+ */
 func NewNote(fpath string) ObsidianNote {
 	return ObsidianNote{fpath, nil, nil}
 }
 
+/*
+ * Read an Obsidian note from a file
+ */
 func (note *ObsidianNote) Read() (string, error) {
 	body, err := ioutil.ReadFile(note.fpath)
 
@@ -28,9 +34,12 @@ func (note *ObsidianNote) Read() (string, error) {
 	return string(body), err
 }
 
-func FindTitle(fpath string) string {
+/*
+ * Find the title in the target Obsidian file
+ */
+func (note *ObsidianNote) FindTitle() string {
 	title := regexp.MustCompile("-")
-	pair := title.Split(strings.Replace(fpath, ".md", "", 1), -1)
+	pair := title.Split(strings.Replace(note.fpath, ".md", "", 1), -1)
 
 	return pair[len(pair)-1]
 }
@@ -154,10 +163,16 @@ func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
 	}
 }
 
+/*
+ * Get the hash currently recorded for a file
+ */
 func (note *ObsidianNote) GetStoredHash(conn *ObsidianDB) (string, error) {
 	return conn.GetFileHash(note.fpath)
 }
 
+/*
+ * Extract information about a note
+ */
 func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 	text, err := note.Read()
 
@@ -199,7 +214,7 @@ func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 	tags := FindTags(body)
 
 	extracted := &MarkdownData{
-		Title:     FindTitle(note.fpath),
+		Title:     note.FindTitle(),
 		Wikilinks: FindWikilinks(body),
 		Tags:      tags,
 		Urls:      FindUrls(body),
