@@ -1,9 +1,6 @@
 package diatom
 
 import (
-	"fmt"
-	"sync"
-
 	_ "github.com/mattn/go-sqlite3"
 
 	"strings"
@@ -28,12 +25,9 @@ func GetSectionBounds(text string) []int {
 
 // Main function. Read from Obsidian & save as structured data.
 func Diatom(args *DiatomArgs) error {
-	vault := ObsidianVault{
-		dpath: args.dir,
-	}
+	vault := ObsidianVault{dpath: args.dir}
 
 	matches, err := vault.GetNotes("*.md")
-
 	if err != nil {
 		return err
 	}
@@ -44,91 +38,121 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	err = conn.CreateTables()
-
 	if err != nil {
 		return err
 	}
 
 	defer conn.Close()
-	if err != nil {
-		return err
-	}
 
-	// job, error channels
 	workerCount := 20
+
 	jobs := make(chan string)
-	errors := make(chan error, workerCount)
+	errors := make(chan error)
 
-	// take the channel, read jobs, write metadata to sqlite
-	extractWriteWorker := func(wg *sync.WaitGroup, errors chan<- error) {
-		// before exit, decrement the done count.
-
-		for fpath := range jobs {
-			// extract information
-			note := NewNote(fpath)
-			note.Walk(&conn)
-
-			// only extract hash-data where not null
-			done, err := note.ExtractData(&conn)
-			if err != nil {
-				errors <- err
-				wg.Done()
-				continue
-			}
-
-			// if we have analysed this file-hash
-			if done {
-				wg.Done()
-				continue
-			}
-
-			// bail out if extract-data fails
-			if err != nil {
-				errors <- fmt.Errorf("note.ExtractData() %v: %v", fpath, err)
-				return
-			}
-
-			note.Write(conn, errors)
-			wg.Done()
-			// default case, mark job as done
-		}
-	}
-
-	// distribute among a list of jobs
-	var wg sync.WaitGroup
-	wg.Add(len(matches))
-
-	// start workers to process files
+	// start workers to process files, feed errors into an aggregator channel
 	for workIdx := 0; workIdx < workerCount; workIdx++ {
-		go extractWriteWorker(&wg, errors)
+		go func() {
+			for err := range ExtractWriteWorker(&conn, jobs) {
+				errors <- err
+			}
+		}()
 	}
+
+	// concurrently save file degrees
+	go func() {
+		for err := range InDegreeJob(&conn) {
+			errors <- err
+		}
+	}()
+	go func() {
+		for err := range OutDegreeJob(&conn) {
+			errors <- err
+		}
+	}()
 
 	// write each file to a channel read by many workers
-	for _, fpath := range matches {
-		jobs <- fpath
-	}
+	go func() {
+		for _, fpath := range matches {
+			jobs <- fpath
+		}
+		close(jobs)
+	}()
 
-	close(jobs)
-
-	// receive errors and panic if received
-	select {
-	case err := <-errors:
-		return err
-	default:
-	}
-
-	wg.Wait()
-	close(errors)
-
-	err = conn.AddInDegree()
-	if err != nil {
-		return err
-	}
-
-	err = conn.AddOutDegree()
-	if err != nil {
+	for err := range errors {
 		return err
 	}
 
 	return nil
+}
+
+func InDegreeJob(conn *ObsidianDB) <-chan error {
+	errors := make(chan error, 0)
+
+	go func() {
+		defer close(errors)
+
+		err := conn.AddInDegree()
+
+		if err != nil {
+			errors <- err
+			return
+		}
+	}()
+
+	return errors
+}
+
+func OutDegreeJob(conn *ObsidianDB) <-chan error {
+	errors := make(chan error, 0)
+
+	go func() {
+		defer close(errors)
+
+		err := conn.AddOutDegree()
+
+		if err != nil {
+			errors <- err
+			return
+		}
+	}()
+
+	return errors
+}
+
+// take the channel, read jobs, write metadata to sqlite
+func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
+	// before exit, decrement the done count.
+
+	errors := make(chan error)
+
+	go func() {
+		for fpath := range jobs {
+			// extract information
+			note := NewNote(fpath)
+
+			// update note in-place
+			err := note.Walk(conn)
+			if err != nil {
+				errors <- err
+				continue
+			}
+
+			// only extract hash-data where not null
+			done, err := note.ExtractData(conn)
+			if err != nil {
+				errors <- err
+				continue
+			}
+
+			// if we have analysed this file-hash; assume the database
+			// contains all relevant information for this file
+			if done {
+				continue
+			}
+
+			note.Write(conn, errors)
+		}
+	}()
+
+	return errors
 }

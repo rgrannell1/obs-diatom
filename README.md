@@ -3,6 +3,23 @@
 
 Read and store Obsidian notes as structured data.
 
+## Usage
+
+```bash
+diatom <vault-path>
+```
+
+## Description
+
+Diatom extracts information from human-readable markdown into a Sqlite database.
+
+- File names, titles, and hashes
+- Tags in a file
+- Urls in a file
+- Wikilinks in a file, their alias
+- Note frontmatter
+- Code-blocks with an information section starting with an `!`
+
 ## Tables
 
 Diatom extracts note-information into the following tables:

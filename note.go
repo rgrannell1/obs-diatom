@@ -89,7 +89,7 @@ func HashContent(text string) uint32 {
 	return hash.Sum32()
 }
 
-func (note *ObsidianNote) Write(conn ObsidianDB, errors chan<- error) {
+func (note *ObsidianNote) Write(conn *ObsidianDB, errors chan<- error) {
 	fpath := note.fpath
 	bodyData := note.data
 
