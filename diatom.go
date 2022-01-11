@@ -144,7 +144,9 @@ func OutDegreeJob(conn *ObsidianDB) <-chan error {
 	return errorsChan
 }
 
-// take the channel, read jobs, write metadata to sqlite
+/*
+ * take the channel, read jobs, write metadata to sqlite
+ */
 func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 	// before exit, decrement the done count.
 
@@ -184,6 +186,9 @@ func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 	return errorsChan
 }
 
+/*
+ * Remove database entries for files that no longer exist
+ */
 func RemoveDeletedFiles(conn *ObsidianDB) <-chan error {
 	errorsChan := make(chan error)
 

@@ -97,13 +97,28 @@ func (note *ObsidianNote) Write(conn *ObsidianDB, errors chan<- error) {
 	fpath := note.fpath
 	bodyData := note.data
 
-	err := conn.CreateTables()
-	if err != nil {
-		errors <- fmt.Errorf("note.CreateTables() %v: %v", note.fpath, err)
+	if bodyData == nil {
 		return
 	}
 
-	if bodyData == nil {
+	err := conn.DeleteTag(fpath)
+	if err != nil {
+		errors <- err
+		return
+	}
+	err = conn.DeleteMetadata(fpath)
+	if err != nil {
+		errors <- err
+		return
+	}
+	err = conn.DeleteTag(fpath)
+	if err != nil {
+		errors <- err
+		return
+	}
+	err = conn.DeleteWikilink(fpath)
+	if err != nil {
+		errors <- err
 		return
 	}
 

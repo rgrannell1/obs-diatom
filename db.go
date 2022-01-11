@@ -169,6 +169,7 @@ func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 }
 
 func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
+
 	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
