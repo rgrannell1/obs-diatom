@@ -1,4 +1,4 @@
-module github.com/rgrannell1/diatom/v2
+module github.com/rgrannell1/diatom
 
 go 1.18
 
@@ -8,10 +8,8 @@ require (
 	github.com/gomarkdown/markdown v0.0.0-20211212230626-5af6ad2f47df
 	github.com/google/gops v0.3.22
 	github.com/mattn/go-sqlite3 v1.14.10
-)
-
-require (
-	github.com/pkg/errors v0.9.1 // indirect
-	golang.org/x/sys v0.0.0-20210902050250-f475640dd07b // indirect
+	github.com/pkg/errors v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+require golang.org/x/sys v0.0.0-20210902050250-f475640dd07b // indirect

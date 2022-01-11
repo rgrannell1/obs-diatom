@@ -1,4 +1,4 @@
-package main
+package diatom
 
 import (
 	"database/sql"
@@ -30,8 +30,8 @@ type ObsidianDB struct {
 
 // CLI Arguments
 type DiatomArgs struct {
-	dir    string
-	dbPath string
+	Dir    string
+	DBPath string
 }
 
 // Obsidian note information

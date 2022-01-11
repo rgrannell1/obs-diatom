@@ -9,11 +9,13 @@ import (
 	"github.com/docopt/docopt-go"
 	"github.com/google/gops/agent"
 	_ "github.com/mattn/go-sqlite3"
+
+	diatom "github.com/rgrannell1/diatom/pkg"
 )
 
 // Main function. Read from Obsidian & save as structured data.
 func main() {
-	opts, err := docopt.ParseDoc(Usage())
+	opts, err := docopt.ParseDoc(diatom.Usage())
 
 	if err != nil {
 		panic(err)
@@ -35,12 +37,12 @@ func main() {
 
 	dbpath = filepath.Join(home, ".diatom.sqlite")
 
-	args := &DiatomArgs{
-		dir:    dpath,
-		dbPath: dbpath,
+	args := &diatom.DiatomArgs{
+		Dir:    dpath,
+		DBPath: dbpath,
 	}
 
-	err = Diatom(args)
+	err = diatom.Diatom(args)
 
 	if err != nil {
 		fmt.Printf("%+v\n", err)

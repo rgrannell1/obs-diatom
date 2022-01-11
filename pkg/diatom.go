@@ -1,4 +1,4 @@
-package main
+package diatom
 
 import (
 	"sync"
@@ -28,14 +28,14 @@ func GetSectionBounds(text string) []int {
 
 // Main function. Read from Obsidian & save as structured data.
 func Diatom(args *DiatomArgs) error {
-	vault := ObsidianVault{dpath: args.dir}
+	vault := ObsidianVault{dpath: args.Dir}
 
 	matches, err := vault.GetNotes("**/*.md")
 	if err != nil {
 		return err
 	}
 
-	conn, err := NewDB(args.dbPath)
+	conn, err := NewDB(args.DBPath)
 	if err != nil {
 		return err
 	}
