@@ -1,7 +1,10 @@
-package diatom
+package main
 
 import (
+	"sync"
+
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/pkg/errors"
 
 	"strings"
 )
@@ -27,7 +30,7 @@ func GetSectionBounds(text string) []int {
 func Diatom(args *DiatomArgs) error {
 	vault := ObsidianVault{dpath: args.dir}
 
-	matches, err := vault.GetNotes("*.md")
+	matches, err := vault.GetNotes("**/*.md")
 	if err != nil {
 		return err
 	}
@@ -39,7 +42,7 @@ func Diatom(args *DiatomArgs) error {
 
 	err = conn.CreateTables()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failure creating tables")
 	}
 
 	defer conn.Close()
@@ -47,28 +50,21 @@ func Diatom(args *DiatomArgs) error {
 	workerCount := 20
 
 	jobs := make(chan string)
-	errors := make(chan error)
+	errorsChan := make(chan error, 1024)
 
-	// start workers to process files, feed errors into an aggregator channel
+	var wg sync.WaitGroup
+	wg.Add((workerCount) + 3) // two more for other queries
+
+	// start workers to process files, feed errorsChan into an aggregator channel
 	for workIdx := 0; workIdx < workerCount; workIdx++ {
 		go func() {
 			for err := range ExtractWriteWorker(&conn, jobs) {
-				errors <- err
+				errorsChan <- err
 			}
+
+			wg.Done()
 		}()
 	}
-
-	// concurrently save file degrees
-	go func() {
-		for err := range InDegreeJob(&conn) {
-			errors <- err
-		}
-	}()
-	go func() {
-		for err := range OutDegreeJob(&conn) {
-			errors <- err
-		}
-	}()
 
 	// write each file to a channel read by many workers
 	go func() {
@@ -78,7 +74,36 @@ func Diatom(args *DiatomArgs) error {
 		close(jobs)
 	}()
 
-	for err := range errors {
+	go func() {
+		for err := range InDegreeJob(&conn) {
+			errorsChan <- err
+		}
+
+		wg.Done()
+	}()
+
+	go func() {
+		for err := range OutDegreeJob(&conn) {
+			errorsChan <- err
+		}
+
+		wg.Done()
+	}()
+
+	go func() {
+		for err := range RemoveDeletedFiles(&conn) {
+			errorsChan <- err
+		}
+
+		wg.Done()
+	}()
+
+	go func() {
+		wg.Wait()
+		close(errorsChan)
+	}()
+
+	for err := range errorsChan {
 		return err
 	}
 
@@ -86,46 +111,48 @@ func Diatom(args *DiatomArgs) error {
 }
 
 func InDegreeJob(conn *ObsidianDB) <-chan error {
-	errors := make(chan error, 0)
+	errorsChan := make(chan error, 0)
 
 	go func() {
-		defer close(errors)
+		defer close(errorsChan)
 
 		err := conn.AddInDegree()
 
 		if err != nil {
-			errors <- err
+			errorsChan <- errors.Wrap(err, "failure setting in-degree")
 			return
 		}
 	}()
 
-	return errors
+	return errorsChan
 }
 
 func OutDegreeJob(conn *ObsidianDB) <-chan error {
-	errors := make(chan error, 0)
+	errorsChan := make(chan error, 0)
 
 	go func() {
-		defer close(errors)
+		defer close(errorsChan)
 
 		err := conn.AddOutDegree()
 
 		if err != nil {
-			errors <- err
+			errorsChan <- errors.Wrap(err, "failure setting out-degree")
 			return
 		}
 	}()
 
-	return errors
+	return errorsChan
 }
 
 // take the channel, read jobs, write metadata to sqlite
 func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 	// before exit, decrement the done count.
 
-	errors := make(chan error)
+	errorsChan := make(chan error)
 
 	go func() {
+		defer close(errorsChan)
+
 		for fpath := range jobs {
 			// extract information
 			note := NewNote(fpath)
@@ -133,14 +160,14 @@ func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 			// update note in-place
 			err := note.Walk(conn)
 			if err != nil {
-				errors <- err
+				errorsChan <- errors.Wrap(err, "failure walking through note markdown")
 				continue
 			}
 
 			// only extract hash-data where not null
 			done, err := note.ExtractData(conn)
 			if err != nil {
-				errors <- err
+				errorsChan <- errors.Wrap(err, "failure extracting data")
 				continue
 			}
 
@@ -150,9 +177,44 @@ func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 				continue
 			}
 
-			note.Write(conn, errors)
+			note.Write(conn, errorsChan)
 		}
 	}()
 
-	return errors
+	return errorsChan
+}
+
+func RemoveDeletedFiles(conn *ObsidianDB) <-chan error {
+	errorsChan := make(chan error)
+
+	go func() {
+		defer close(errorsChan)
+
+		fpaths, err := conn.GetFileIds()
+		if err != nil {
+			errorsChan <- errors.Wrap(err, "failure checking if note existed")
+			return
+		}
+
+		for _, fpath := range fpaths {
+			note := NewNote(fpath)
+
+			exists, err := note.Exists()
+			if err != nil {
+				errorsChan <- errors.Wrap(err, "failure checking if note existed")
+				continue
+			}
+
+			if !exists {
+				err := note.Delete(conn)
+				if err != nil {
+					errorsChan <- errors.Wrap(err, "failure deleting non-existing note from database")
+					continue
+				}
+			}
+		}
+
+	}()
+
+	return errorsChan
 }

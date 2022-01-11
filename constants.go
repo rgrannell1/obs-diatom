@@ -1,4 +1,4 @@
-package diatom
+package main
 
 import (
 	"database/sql"

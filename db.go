@@ -1,4 +1,4 @@
-package diatom
+package main
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ import (
  * Construct a database
  */
 func NewDB(fpath string) (ObsidianDB, error) {
-	db, err := sql.Open("sqlite3", fpath)
+	db, err := sql.Open("sqlite3", "file:"+fpath+"?_foreign_keys=true&_busy_timeout=5000&_journal_mode=WAL")
 
 	if err != nil {
 		return ObsidianDB{}, err
@@ -100,15 +100,12 @@ func (conn *ObsidianDB) CreateTables() error {
 		return err
 	}
 
-	err = tx.Commit()
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return tx.Commit()
 }
 
+/*
+ * Get the file-hash from the file table in Sqlite
+ */
 func (conn *ObsidianDB) GetFileHash(fpath string) (string, error) {
 	var hash string
 	row := conn.Db.QueryRow(`SELECT hash FROM file WHERE file.id = ?`, fpath)
@@ -370,5 +367,52 @@ func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) err
 		return err
 	}
 
-	return tx.Commit()
+	return nil
+}
+
+func (conn *ObsidianDB) GetFileIds() ([]string, error) {
+	rows, err := conn.Db.Query(`SELECT id from file`)
+	fileIds := []string{}
+	if err != nil {
+		return fileIds, err
+	}
+
+	defer rows.Close()
+
+	if err != nil {
+		return fileIds, err
+	}
+
+	for rows.Next() {
+		var fileId string
+
+		err := rows.Scan(&fileId)
+		if err != nil {
+			return fileIds, err
+		}
+
+		fileIds = append(fileIds, fileId)
+	}
+
+	return fileIds, nil
+}
+
+func (conn *ObsidianDB) DeleteWikilink(fpath string) error {
+	_, err := conn.Db.Exec(`DELETE FROM wikilink where file_id = ?`, fpath)
+	return err
+}
+
+func (conn *ObsidianDB) DeleteTag(fpath string) error {
+	_, err := conn.Db.Exec(`DELETE FROM tag where file_id = ?`, fpath)
+	return err
+}
+
+func (conn *ObsidianDB) DeleteMetadata(fpath string) error {
+	_, err := conn.Db.Exec(`DELETE FROM metadata where file_id = ?`, fpath)
+	return err
+}
+
+func (conn *ObsidianDB) DeleteFile(fpath string) error {
+	_, err := conn.Db.Exec(`DELETE FROM file where id = ?`, fpath)
+	return err
 }

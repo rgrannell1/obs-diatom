@@ -1,6 +1,7 @@
-package diatom
+package main
 
 import (
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
@@ -83,6 +84,9 @@ func FindUrls(body string) []string {
 	return []string{}
 }
 
+/*
+ * Compute a hash for input text
+ */
 func HashContent(text string) uint32 {
 	hash := fnv.New32a()
 	hash.Write([]byte(text))
@@ -179,10 +183,10 @@ func (note *ObsidianNote) Changed(text string, conn *ObsidianDB) (bool, error) {
 
 	currHash := HashContent(text)
 	if hash == fmt.Sprint(currHash) {
-		return true, nil
+		return false, nil
 	}
 
-	return false, nil
+	return true, nil
 }
 
 /*
@@ -260,13 +264,14 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 		return err
 	}
 
-	tx, err := conn.Db.Begin()
-	if err != nil {
-		return err
-	}
-
 	// traverse markdown document using this function
 	processMarkdownNode := func(node ast.Node, entering bool) ast.WalkStatus {
+		tx, err := conn.Db.Begin()
+		defer tx.Rollback()
+		if err != nil {
+			panic(err)
+		}
+
 		switch node.(type) {
 		case *ast.CodeBlock:
 			leaf := node.AsLeaf()
@@ -285,10 +290,49 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
 			}
 		}
 
+		tx.Commit()
 		return ast.GoToNext
 	}
 
 	// walk through markdown tree and store interesting information
 	ast.WalkFunc(doc, processMarkdownNode)
-	return tx.Commit()
+	return nil
+}
+
+func (note *ObsidianNote) Exists() (bool, error) {
+	_, err := os.Stat(note.fpath)
+	if err == nil {
+		return true, nil
+	}
+
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+
+	return false, err
+}
+
+/*
+ * Remove references to non-existing files from the database
+ *
+ */
+func (note *ObsidianNote) Delete(conn *ObsidianDB) error {
+	err := conn.DeleteWikilink(note.fpath)
+	if err != nil {
+		return err
+	}
+	err = conn.DeleteTag(note.fpath)
+	if err != nil {
+		return err
+	}
+	err = conn.DeleteMetadata(note.fpath)
+	if err != nil {
+		return err
+	}
+	err = conn.DeleteFile(note.fpath)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
