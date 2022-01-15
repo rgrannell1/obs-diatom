@@ -20,6 +20,8 @@ Diatom extracts information from human-readable markdown into a Sqlite database.
 - Note frontmatter
 - Code-blocks with an information section starting with an `!`
 
+This database can then be used by applications that read or modify your notes.
+
 ## Tables
 
 Diatom extracts note-information into the following tables:

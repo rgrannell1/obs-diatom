@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/gernest/front"
+	"github.com/ghodss/yaml"
 	"github.com/gomarkdown/markdown/ast"
 	"github.com/gomarkdown/markdown/parser"
 )
@@ -269,49 +270,83 @@ func (note *ObsidianNote) Parse() (ast.Node, error) {
 	return parser.New().Parse(content), nil
 }
 
+func yamlToJson(src string) (string, error) {
+	by, err := yaml.YAMLToJSON([]byte(src))
+
+	if err != nil {
+		return "", err
+	}
+
+	return string(by), nil
+}
+
 /*
  * Walk through note and collect interesting information
  */
-func (note *ObsidianNote) Walk(conn *ObsidianDB) error {
+func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
+	errChan := make(chan error)
 	doc, err := note.Parse()
 
 	if err != nil {
-		return err
+		errChan <- err
+		return errChan
+	}
+
+	tx, err := conn.Db.Begin()
+	if err != nil {
+		errChan <- err
 	}
 
 	// traverse markdown document using this function
 	processMarkdownNode := func(node ast.Node, entering bool) ast.WalkStatus {
-		tx, err := conn.Db.Begin()
-		defer tx.Rollback()
 		if err != nil {
-			panic(err)
+			errChan <- err
 		}
 
+		// parse through markdown document
 		switch node.(type) {
 		case *ast.CodeBlock:
 			leaf := node.AsLeaf()
 
 			info := string(node.(*ast.CodeBlock).Info)
 
-			if len(info) > 0 && info[0] == '!' {
-				// -- a special code-block containing application-readable data
-
-				yaml := string(leaf.Literal)
-				err := conn.InsertMetadata(tx, note.fpath, info, yaml)
+			// -- a special code-block containing application-readable data
+			if isLabelledCodeBlock := len(info) > 0 && info[0] == '!'; isLabelledCodeBlock {
+				json, err := yamlToJson(string(leaf.Literal))
 
 				if err != nil {
-					panic(err)
+					errChan <- &CodedError{
+						ERR_JSON_TO_MARKDOWN,
+						errors.New(note.fpath + "\n" + err.Error()),
+					}
+
+					return ast.GoToNext
+				}
+
+				if err := conn.InsertMetadata(tx, note.fpath, info, json); err != nil {
+					errChan <- err
+					return ast.GoToNext
 				}
 			}
 		}
 
-		tx.Commit()
 		return ast.GoToNext
 	}
 
-	// walk through markdown tree and store interesting information
-	ast.WalkFunc(doc, processMarkdownNode)
-	return nil
+	// walk through markdown tree and store information about each note
+	// into a database
+	go func() {
+		ast.WalkFunc(doc, processMarkdownNode)
+
+		// commit changes after walk is complete
+		if err = tx.Commit(); err != nil {
+			errChan <- err
+		}
+
+		close(errChan)
+	}()
+
+	return errChan
 }
 
 func (note *ObsidianNote) Exists() (bool, error) {

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"path"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v2"
 )
@@ -13,13 +12,8 @@ import (
  * Construct a database
  */
 func NewDB(fpath string) (ObsidianDB, error) {
-	db, err := sql.Open("sqlite3", "file:"+fpath+"?_foreign_keys=true&_busy_timeout=5000&_journal_mode=WAL")
-
-	if err != nil {
-		return ObsidianDB{}, err
-	}
-
-	return ObsidianDB{db, &sync.Mutex{}}, nil
+	db, err := sql.Open("sqlite3", "file:"+fpath+"?_foreign_keys=true&_busy_timeout=5000&_journal_mode=WAL&_sqlite_json=yes")
+	return ObsidianDB{db}, err
 }
 
 // Close a database connection
@@ -31,8 +25,6 @@ func (conn *ObsidianDB) Close() error {
 func (conn *ObsidianDB) CreateTables() error {
 	// create a file table
 	tx, err := conn.Db.Begin()
-	defer tx.Rollback()
-
 	if err != nil {
 		return err
 	}
@@ -196,10 +188,18 @@ func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fp
 	defer tx.Rollback()
 
 	bytes, err := yaml.Marshal(frontmatter)
+	if err != nil {
+		return err
+	}
+
+	json, err := yamlToJson(string(bytes))
+	if err != nil {
+		return err
+	}
 
 	_, err = tx.Exec(`
-	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
-	`, fpath, "!frontmatter", string(bytes))
+	INSERT OR REPLACE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
+	`, fpath, "!frontmatter", json)
 
 	if err != nil {
 		return err
@@ -364,11 +364,7 @@ func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) err
 	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
 	`, fpath, info, yaml)
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (conn *ObsidianDB) GetFileIds() ([]string, error) {

@@ -1,6 +1,7 @@
 package diatom
 
 import (
+	"fmt"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -53,13 +54,18 @@ func Diatom(args *DiatomArgs) error {
 	errorsChan := make(chan error, 1024)
 
 	var wg sync.WaitGroup
-	wg.Add((workerCount) + 3) // two more for other queries
+	wg.Add(workerCount)
 
 	// start workers to process files, feed errorsChan into an aggregator channel
 	for workIdx := 0; workIdx < workerCount; workIdx++ {
 		go func() {
+
 			for err := range ExtractWriteWorker(&conn, jobs) {
-				errorsChan <- err
+				if strings.HasPrefix(err.Error(), ERR_JSON_TO_MARKDOWN) {
+					fmt.Println(err)
+				} else {
+					errorsChan <- err
+				}
 			}
 
 			wg.Done()
@@ -74,6 +80,7 @@ func Diatom(args *DiatomArgs) error {
 		close(jobs)
 	}()
 
+	wg.Add(1)
 	go func() {
 		for err := range InDegreeJob(&conn) {
 			errorsChan <- err
@@ -82,7 +89,9 @@ func Diatom(args *DiatomArgs) error {
 		wg.Done()
 	}()
 
+	wg.Add(1)
 	go func() {
+
 		for err := range OutDegreeJob(&conn) {
 			errorsChan <- err
 		}
@@ -90,6 +99,7 @@ func Diatom(args *DiatomArgs) error {
 		wg.Done()
 	}()
 
+	wg.Add(1)
 	go func() {
 		for err := range RemoveDeletedFiles(&conn) {
 			errorsChan <- err
@@ -160,9 +170,13 @@ func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
 			note := NewNote(fpath)
 
 			// update note in-place
-			err := note.Walk(conn)
-			if err != nil {
-				errorsChan <- errors.Wrap(err, "failure walking through note markdown")
+			walkFailed := false
+			for err := range note.Walk(conn) {
+				walkFailed = true
+				errorsChan <- err
+			}
+
+			if walkFailed {
 				continue
 			}
 

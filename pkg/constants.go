@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
-	"sync"
 )
 
 // Wikilink data-structure
@@ -24,8 +23,7 @@ type MarkdownData struct {
 
 // Obsidian database structure
 type ObsidianDB struct {
-	Db   *sql.DB
-	Lock *sync.Mutex
+	Db *sql.DB
 }
 
 // CLI Arguments

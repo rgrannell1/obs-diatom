@@ -12,4 +12,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require golang.org/x/sys v0.0.0-20210902050250-f475640dd07b // indirect
+require (
+	github.com/ghodss/yaml v1.0.0 // indirect
+	golang.org/x/sys v0.0.0-20210902050250-f475640dd07b // indirect
+)
