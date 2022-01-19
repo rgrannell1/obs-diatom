@@ -1,134 +1,60 @@
 package diatom
 
 import (
-	"fmt"
-	"sync"
-
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
-
-	"strings"
 )
 
 /*
- * Find section bounds in a markdown document, to
- * help find the bounds YAML metadata exists within
+ * Main function. Read from Obsidian & save as structured data.
+ *
  */
-func GetSectionBounds(text string) []int {
-	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	bounds := []int{}
-
-	for idx, line := range lines {
-		if strings.HasPrefix(line, "---") {
-			bounds = append(bounds, idx)
-		}
-	}
-
-	return bounds
-}
-
-// Main function. Read from Obsidian & save as structured data.
 func Diatom(args *DiatomArgs) error {
-	vault := ObsidianVault{dpath: args.Dir}
-
-	matches, err := vault.GetNotes("**/*.md")
-	if err != nil {
-		return err
-	}
-
 	conn, err := NewDB(args.DBPath)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
-	err = conn.CreateTables()
-	if err != nil {
+	if err := conn.CreateTables(); err != nil {
 		return errors.Wrap(err, "failure creating tables")
 	}
 
-	defer conn.Close()
-
-	workerCount := 20
-
-	jobs := make(chan string)
-	errorsChan := make(chan error, 1024)
-
-	var wg sync.WaitGroup
-	wg.Add(workerCount)
-
-	// start workers to process files, feed errorsChan into an aggregator channel
-	for workIdx := 0; workIdx < workerCount; workIdx++ {
-		go func() {
-
-			for err := range ExtractWriteWorker(&conn, jobs) {
-				if strings.HasPrefix(err.Error(), ERR_JSON_TO_MARKDOWN) {
-					fmt.Println(err)
-				} else {
-					errorsChan <- err
-				}
-			}
-
-			wg.Done()
-		}()
+	extractors := ExtractWorkers{
+		Count: WORKER_COUNT,
+		Jobs:  make(chan string, 1_024),
 	}
 
-	// write each file to a channel read by many workers
-	go func() {
-		for _, fpath := range matches {
-			jobs <- fpath
-		}
-		close(jobs)
-	}()
-
-	wg.Add(1)
-	go func() {
-		for err := range InDegreeJob(&conn) {
-			errorsChan <- err
-		}
-
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-
-		for err := range OutDegreeJob(&conn) {
-			errorsChan <- err
-		}
-
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		for err := range RemoveDeletedFiles(&conn) {
-			errorsChan <- err
-		}
-
-		wg.Done()
-	}()
-
-	go func() {
-		wg.Wait()
-		close(errorsChan)
-	}()
-
-	for err := range errorsChan {
+	vault := ObsidianVault{dpath: args.Dir}
+	mdFiles, err := vault.GetNotes()
+	if err != nil {
 		return err
 	}
+
+	for err := range extractors.Start(&conn, mdFiles) {
+		panic(err)
+	}
+
+	graphers := GraphWorker{}
+	graphers.Start(&conn)
+
+	removers := RemoveWorker{}
+	removers.Start(&conn)
 
 	return nil
 }
 
+/*
+ * Insert in-degrees into database
+ *
+ */
 func InDegreeJob(conn *ObsidianDB) <-chan error {
 	errorsChan := make(chan error, 0)
 
 	go func() {
 		defer close(errorsChan)
 
-		err := conn.AddInDegree()
-
-		if err != nil {
+		if err := conn.AddInDegree(); err != nil {
 			errorsChan <- errors.Wrap(err, "failure setting in-degree")
 			return
 		}
@@ -137,63 +63,18 @@ func InDegreeJob(conn *ObsidianDB) <-chan error {
 	return errorsChan
 }
 
+/*
+ * Insert out-degrees into database
+ */
 func OutDegreeJob(conn *ObsidianDB) <-chan error {
 	errorsChan := make(chan error, 0)
 
 	go func() {
 		defer close(errorsChan)
 
-		err := conn.AddOutDegree()
-
-		if err != nil {
+		if err := conn.AddOutDegree(); err != nil {
 			errorsChan <- errors.Wrap(err, "failure setting out-degree")
 			return
-		}
-	}()
-
-	return errorsChan
-}
-
-/*
- * take the channel, read jobs, write metadata to sqlite
- */
-func ExtractWriteWorker(conn *ObsidianDB, jobs <-chan string) <-chan error {
-	// before exit, decrement the done count.
-
-	errorsChan := make(chan error)
-
-	go func() {
-		defer close(errorsChan)
-
-		for fpath := range jobs {
-			// extract information
-			note := NewNote(fpath)
-
-			// update note in-place
-			walkFailed := false
-			for err := range note.Walk(conn) {
-				walkFailed = true
-				errorsChan <- err
-			}
-
-			if walkFailed {
-				continue
-			}
-
-			// only extract hash-data where not null
-			done, err := note.ExtractData(conn)
-			if err != nil {
-				errorsChan <- errors.Wrap(err, "failure extracting data")
-				continue
-			}
-
-			// if we have analysed this file-hash; assume the database
-			// contains all relevant information for this file
-			if done {
-				continue
-			}
-
-			note.Write(conn, errorsChan)
 		}
 	}()
 

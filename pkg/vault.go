@@ -6,16 +6,22 @@ import (
 )
 
 /*
- * Enumerate all notes in an Obsidian vault
+ * Enumerate all notes in an Obsidian vault.
+ *
  */
-func (vault *ObsidianVault) GetNotes(globSuffix string) ([]string, error) {
-	matches, err := filepath.Glob(filepath.Join(vault.dpath, globSuffix))
+func (vault *ObsidianVault) GetNotes() ([]string, error) {
+	flatMatches, err := filepath.Glob(filepath.Join(vault.dpath, "*.md"))
+	if err != nil {
+		return []string{}, err
+	}
+
+	nestedMatches, err := filepath.Glob(filepath.Join(vault.dpath, "**/*.md"))
 	if err != nil {
 		return []string{}, err
 	}
 
 	filtered := []string{}
-	for _, match := range matches {
+	for _, match := range append(nestedMatches, flatMatches...) {
 		if !strings.HasPrefix(match, filepath.Join(vault.dpath, ".trash")) {
 			filtered = append(filtered, match)
 		}

@@ -18,7 +18,8 @@ func main() {
 	opts, err := docopt.ParseDoc(diatom.Usage())
 
 	if err != nil {
-		panic(err)
+		fmt.Printf("%+v\n", err)
+		os.Exit(1)
 	}
 
 	if err := agent.Listen(agent.Options{}); err != nil {
@@ -36,13 +37,10 @@ func main() {
 	}
 
 	dbpath = filepath.Join(home, ".diatom.sqlite")
-
-	args := &diatom.DiatomArgs{
+	err = diatom.Diatom(&diatom.DiatomArgs{
 		Dir:    dpath,
 		DBPath: dbpath,
-	}
-
-	err = diatom.Diatom(args)
+	})
 
 	if err != nil {
 		fmt.Printf("%+v\n", err)

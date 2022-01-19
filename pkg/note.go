@@ -17,7 +17,26 @@ import (
 )
 
 /*
- * Construct an Obsidian note representation
+ * Find section bounds in a markdown document, to
+ * help find the bounds YAML metadata exists within
+ *
+ */
+func GetSectionBounds(text string) []int {
+	bounds := []int{}
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+
+	for idx, line := range lines {
+		if strings.HasPrefix(line, "---") {
+			bounds = append(bounds, idx)
+		}
+	}
+
+	return bounds
+}
+
+/*
+ * Construct an Obsidian note representation.
+ *
  */
 func NewNote(fpath string) ObsidianNote {
 	return ObsidianNote{fpath, nil, nil}
@@ -25,6 +44,7 @@ func NewNote(fpath string) ObsidianNote {
 
 /*
  * Read an Obsidian note from a file
+ *
  */
 func (note *ObsidianNote) Read() (string, error) {
 	body, err := ioutil.ReadFile(note.fpath)
@@ -37,16 +57,21 @@ func (note *ObsidianNote) Read() (string, error) {
 }
 
 /*
- * Find the title in the target Obsidian file
+ * Find the title in the target Obsidian file, from the file-path.
+ *
  */
 func (note *ObsidianNote) FindTitle() string {
-	title := regexp.MustCompile("-")
-	pair := title.Split(strings.Replace(note.fpath, ".md", "", 1), -1)
+	titlePair := regexp.
+		MustCompile("-").
+		Split(strings.Replace(note.fpath, ".md", "", 1), -1)
 
-	return pair[len(pair)-1]
+	return titlePair[len(titlePair)-1]
 }
 
-// Find WikiLinks
+/*
+ * Find WikiLinks in a document.
+ *
+ */
 func FindWikilinks(body string) []*Wikilink {
 	wikilinkPattern := regexp.MustCompile(`\[{2}[^\[]+\]{2}`)
 

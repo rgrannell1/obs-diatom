@@ -2,6 +2,7 @@ package diatom
 
 import (
 	"database/sql"
+	"errors"
 	"path"
 	"strings"
 
@@ -16,12 +17,16 @@ func NewDB(fpath string) (ObsidianDB, error) {
 	return ObsidianDB{db}, err
 }
 
-// Close a database connection
+/*
+ * Close database connection
+ */
 func (conn *ObsidianDB) Close() error {
 	return conn.Db.Close()
 }
 
-// Create diatom tables in sqlite
+/*
+ * Create table
+ */
 func (conn *ObsidianDB) CreateTables() error {
 	// create a file table
 	tx, err := conn.Db.Begin()
@@ -29,15 +34,15 @@ func (conn *ObsidianDB) CreateTables() error {
 		return err
 	}
 
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS file (
-		id         TEXT NOT NULL,
-		basename   TEXT NOT NULL,
-		title      TEXT NOT NULL,
-		hash       TEXT NOT NULL,
-		in_degree  INTEGER,
-		out_degree INTEGER,
+	_, err = tx.Exec(`create table if not exists file (
+		id         text not null,
+		basename   text not null,
+		title      text not null,
+		hash       text not null,
+		in_degree  integer default 0    check(in_degree  >= 0),
+		out_degree integer default 0    check(out_degree >= 0),
 
-		PRIMARY KEY(id)
+		primary key(id)
 	)`)
 
 	if err != nil {
@@ -45,11 +50,11 @@ func (conn *ObsidianDB) CreateTables() error {
 	}
 
 	// create a tag table
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS tag (
-		tag TEXT      NOT NULL,
-		file_id  TEXT NOT NULL,
+	_, err = tx.Exec(`create table if not exists tag (
+		tag      text not null,
+		file_id  text not null,
 
-		PRIMARY KEY(tag, file_id)
+		primary key(tag, file_id)
 	)`)
 
 	if err != nil {
@@ -57,35 +62,35 @@ func (conn *ObsidianDB) CreateTables() error {
 	}
 
 	// create a url table
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS url (
-		url      TEXT NOT NULL,
-		file_id  TEXT NOT NULL,
+	_, err = tx.Exec(`create table if not exists url (
+		url      text not null,
+		file_id  text not null,
 
-		PRIMARY KEY(url, file_id)
+		primary key(url, file_id)
 	)`)
 
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS wikilink (
-		reference TEXT NOT NULL,
-		alias    TEXT,
-		file_id  TEXT NOT NULL,
+	_, err = tx.Exec(`create table if not exists wikilink (
+		reference text not null,
+		alias    text,
+		file_id  text not null,
 
-		PRIMARY KEY(reference, alias, file_id)
+		primary key(reference, alias, file_id)
 	)`)
 
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Exec(`CREATE TABLE IF NOT EXISTS metadata (
-		file_id  TEXT NOT NULL,
-		schema   TEXT NOT NULL,
-		content  TEXT NOT NULL,
+	_, err = tx.Exec(`create table if not exists metadata (
+		file_id  text not null,
+		schema   text not null,
+		content  text not null,
 
-		PRIMARY KEY(file_id, schema)
+		primary key(file_id, schema)
 	)`)
 
 	if err != nil {
@@ -114,6 +119,9 @@ func (conn *ObsidianDB) GetFileHash(fpath string) (string, error) {
 	return hash, nil
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
 	tx, err := conn.Db.Begin()
 	if err != nil {
@@ -129,9 +137,9 @@ func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
 
 	// save file to table
 	_, err = tx.Exec(`
-	INSERT OR IGNORE INTO file (id, basename, title, hash) VALUES (?, ?, ?, ?)
-	ON CONFLICT (id)
-	DO UPDATE SET title = ?, basename = ?, hash = ?
+	insert or ignore into file (id, basename, title, hash) values (?, ?, ?, ?)
+	on conflict (id)
+	do update set title = ?, basename = ?, hash = ?
 	`, fpath, basename, title, hash, title, basename, hash)
 
 	if err != nil {
@@ -141,6 +149,9 @@ func (conn *ObsidianDB) InsertFile(fpath, title, hash string) error {
 	return tx.Commit()
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 	tx, err := conn.Db.Begin()
 	if err != nil {
@@ -149,9 +160,8 @@ func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 	defer tx.Rollback()
 
 	for _, tag := range bodyData.Tags {
-		_, err := tx.Exec(`
-		INSERT OR IGNORE INTO tag (tag, file_id) VALUES (?, ?)
-		`, tag, fpath)
+		_, err := tx.Exec(`insert or replace into tag (tag, file_id) values (?, ?)`, tag, fpath)
+
 		if err != nil {
 			return err
 		}
@@ -160,8 +170,10 @@ func (conn *ObsidianDB) InsertTags(bodyData *MarkdownData, fpath string) error {
 	return tx.Commit()
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
-
 	tx, err := conn.Db.Begin()
 	if err != nil {
 		return err
@@ -170,7 +182,7 @@ func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
 
 	for _, url := range bodyData.Urls {
 		_, err := tx.Exec(`
-		INSERT OR IGNORE INTO url (url, file_id) VALUES (?, ?)
+		insert or ignore into url (url, file_id) values (?, ?)
 		`, url, fpath)
 		if err != nil {
 			return err
@@ -180,6 +192,9 @@ func (conn *ObsidianDB) InsertUrl(bodyData *MarkdownData, fpath string) error {
 	return tx.Commit()
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fpath string) error {
 	tx, err := conn.Db.Begin()
 	if err != nil {
@@ -198,7 +213,7 @@ func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fp
 	}
 
 	_, err = tx.Exec(`
-	INSERT OR REPLACE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
+	insert or replace into metadata (file_id, schema, content) values (?, ?, ?)
 	`, fpath, "!frontmatter", json)
 
 	if err != nil {
@@ -208,6 +223,9 @@ func (conn *ObsidianDB) InsertFrontmatter(frontmatter map[string]interface{}, fp
 	return tx.Commit()
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) error {
 	tx, err := conn.Db.Begin()
 	if err != nil {
@@ -217,7 +235,7 @@ func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) er
 
 	for _, wikilink := range bodyData.Wikilinks {
 		_, err := tx.Exec(`
-		INSERT OR IGNORE INTO wikilink (reference, alias, file_id) VALUES (?, ?, ?)
+		insert or ignore into wikilink (reference, alias, file_id) values (?, ?, ?)
 		`, wikilink.Reference, wikilink.Alias, fpath)
 
 		if err != nil {
@@ -228,22 +246,25 @@ func (conn *ObsidianDB) InsertWikilinks(bodyData *MarkdownData, fpath string) er
 	return tx.Commit()
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) GetInDegree() (*sql.Rows, error) {
 	return conn.Db.Query(`
-		SELECT count(reference) as in_degree, id
-				FROM file
-			LEFT JOIN wikilink ON file.basename = wikilink.reference
-				WHERE id IS NOT NULL
-			GROUP BY id
-		ORDER BY in_degree DESC`)
+		select count(reference) as in_degree, id
+				from file
+			left join wikilink on file.basename = wikilink.reference
+				where id is not null
+			group by id
+		order by in_degree desc`)
 }
 
 func (conn *ObsidianDB) GetOutDegree() (*sql.Rows, error) {
 	return conn.Db.Query(`
-		SELECT count(*) as out_degree, file_id as id
-			FROM wikilink
-		GROUP BY file_id
-		ORDER BY out_degree DESC
+		select count(*) as out_degree, file_id as id
+			from wikilink
+		group by file_id
+		order by out_degree desc
 	`)
 }
 
@@ -262,14 +283,17 @@ func (conn *ObsidianDB) InsertInDegree(tx *sql.Tx, rows *sql.Rows) error {
 	}
 
 	_, err = tx.Exec(`
-	UPDATE file
-	SET in_degree = ?
-	WHERE id = ?
+	update file
+	set in_degree = ?
+	where id = ?
 	`, file.in_degree, file.id)
 
 	return nil
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) InsertOutDegree(tx *sql.Tx, rows *sql.Rows) error {
 	file := struct {
 		out_degree int
@@ -282,15 +306,17 @@ func (conn *ObsidianDB) InsertOutDegree(tx *sql.Tx, rows *sql.Rows) error {
 	}
 
 	_, err = tx.Exec(`
-	UPDATE file
-	SET out_degree = ?
-	WHERE id = ?
+	update file
+	set out_degree = ?
+	where id = ?
 	`, file.out_degree, file.id)
 
 	return nil
 }
 
-// Add the file degree
+/*
+ *
+ */
 func (conn *ObsidianDB) AddInDegree() error {
 	rows, err := conn.GetInDegree()
 	if err != nil {
@@ -302,11 +328,17 @@ func (conn *ObsidianDB) AddInDegree() error {
 	}
 
 	tx, _ := conn.Db.Begin()
+	count := 0
 
 	for rows.Next() {
+		count++
 		if err = conn.InsertInDegree(tx, rows); err != nil {
 			return err
 		}
+	}
+
+	if count == 0 {
+		return errors.New("no files present in database")
 	}
 
 	err = tx.Commit()
@@ -323,7 +355,9 @@ func (conn *ObsidianDB) AddInDegree() error {
 	return nil
 }
 
-// Add the file degree
+/*
+ *
+ */
 func (conn *ObsidianDB) AddOutDegree() error {
 	rows, err := conn.GetOutDegree()
 	if err != nil {
@@ -335,11 +369,16 @@ func (conn *ObsidianDB) AddOutDegree() error {
 	}
 
 	tx, _ := conn.Db.Begin()
+	count := 0
 
 	for rows.Next() {
 		if err = conn.InsertOutDegree(tx, rows); err != nil {
 			return err
 		}
+	}
+
+	if count == 0 {
+		return errors.New("no files present in database")
 	}
 
 	err = tx.Commit()
@@ -361,14 +400,17 @@ func (conn *ObsidianDB) AddOutDegree() error {
  */
 func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) error {
 	_, err := tx.Exec(`
-	INSERT OR IGNORE INTO metadata (file_id, schema, content) VALUES (?, ?, ?)
+	insert or ignore into metadata (file_id, schema, content) values (?, ?, ?)
 	`, fpath, info, yaml)
 
 	return err
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) GetFileIds() ([]string, error) {
-	rows, err := conn.Db.Query(`SELECT id from file`)
+	rows, err := conn.Db.Query(`select id from file`)
 	fileIds := []string{}
 	if err != nil {
 		return fileIds, err
@@ -394,22 +436,34 @@ func (conn *ObsidianDB) GetFileIds() ([]string, error) {
 	return fileIds, nil
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) DeleteWikilink(fpath string) error {
-	_, err := conn.Db.Exec(`DELETE FROM wikilink where file_id = ?`, fpath)
+	_, err := conn.Db.Exec(`delete from wikilink where file_id = ?`, fpath)
 	return err
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) DeleteTag(fpath string) error {
-	_, err := conn.Db.Exec(`DELETE FROM tag where file_id = ?`, fpath)
+	_, err := conn.Db.Exec(`delete from tag where file_id = ?`, fpath)
 	return err
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) DeleteMetadata(fpath string) error {
-	_, err := conn.Db.Exec(`DELETE FROM metadata where file_id = ?`, fpath)
+	_, err := conn.Db.Exec(`delete from metadata where file_id = ?`, fpath)
 	return err
 }
 
+/*
+ *
+ */
 func (conn *ObsidianDB) DeleteFile(fpath string) error {
-	_, err := conn.Db.Exec(`DELETE FROM file where id = ?`, fpath)
+	_, err := conn.Db.Exec(`delete from file where id = ?`, fpath)
 	return err
 }

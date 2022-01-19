@@ -1,3 +1,6 @@
 diatom
 .vscode/settings.json
 diatom.sqlite
+note.py
+opal.py
+vault.py
