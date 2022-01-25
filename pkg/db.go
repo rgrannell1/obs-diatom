@@ -378,6 +378,7 @@ func (conn *ObsidianDB) AddOutDegree() error {
 	count := 0
 
 	for rows.Next() {
+		count++
 		if err = conn.InsertOutDegree(rows); err != nil {
 			return err
 		}

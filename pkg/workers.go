@@ -126,31 +126,13 @@ type GraphWorker struct {
  *
  */
 func (worker *GraphWorker) Start(conn *ObsidianDB) {
-	var wg sync.WaitGroup
-	wg.Add(2)
+	for err := range InDegreeJob(conn) {
+		panic(err)
+	}
 
-	go func() {
-		// write the in-degree for the files present
-
-		go func() {
-			for err := range InDegreeJob(conn) {
-				panic(err)
-			}
-
-			wg.Done()
-		}()
-
-		// write the out-degree for the files present
-		go func() {
-			for err := range OutDegreeJob(conn) {
-				panic(err)
-			}
-
-			wg.Done()
-		}()
-	}()
-
-	wg.Wait()
+	for err := range OutDegreeJob(conn) {
+		panic(err)
+	}
 }
 
 // ================================================ //
@@ -161,6 +143,7 @@ type RemoveWorker struct {
 
 /*
  * Start worker to remove deleted files
+ *
  */
 func (work *RemoveWorker) Start(conn *ObsidianDB) {
 	// remove files that do not exist

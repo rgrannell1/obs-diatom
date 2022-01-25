@@ -1,8 +1,6 @@
 package diatom
 
 import (
-	"sync"
-
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
@@ -22,14 +20,11 @@ func Diatom(args *DiatomArgs) error {
 		return errors.Wrap(err, "failure creating tables")
 	}
 
-	stats := Stats{
-		Data: map[string]int{},
-		Lock: &sync.Mutex{},
-	}
+	stats := NewStats()
 
 	// extract information for each note into the database
 	extractors := ExtractWorkers{
-		Stats: &stats,
+		Stats: stats,
 		Count: WORKER_COUNT,
 		Jobs:  make(chan string, 0),
 	}
@@ -41,16 +36,16 @@ func Diatom(args *DiatomArgs) error {
 	}
 
 	for err := range extractors.Start(&conn, mdFiles) {
-		panic(err)
+		return err
 	}
 
 	graphers := GraphWorker{
-		Stats: &stats,
+		Stats: stats,
 	}
 	graphers.Start(&conn)
 
 	removers := RemoveWorker{
-		Stats: &stats,
+		Stats: stats,
 	}
 	removers.Start(&conn)
 

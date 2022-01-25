@@ -134,6 +134,8 @@ func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 		return errors
 	}
 
+	// +++ subfunction definitions +++ //
+
 	insertFile := func(wg *sync.WaitGroup, errors chan<- error) {
 		defer wg.Done()
 
@@ -175,16 +177,14 @@ func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 	}
 
 	deleteExisting := func(errors chan<- error) {
-		if err := conn.DeleteTag(fpath); err != nil {
-			errors <- err
-		} else if err := conn.DeleteMetadata(fpath); err != nil {
-			errors <- err
-		} else if err := conn.DeleteWikilink(fpath); err != nil {
+		if err := note.Delete(conn); err != nil {
 			errors <- err
 		}
 	}
 
-	// delete existing entries, and insert entries
+	// +++ function core +++ //
+
+	// delete existing entries, and replace entries
 	go func() {
 		deleteExisting(errors)
 
