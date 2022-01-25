@@ -1,7 +1,6 @@
 package diatom
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -21,7 +20,6 @@ func (stat *Stats) Add(key string) {
 	stat.Lock.Lock()
 
 	stat.Data[key]++
-	fmt.Println(stat.Data)
 
 	stat.Lock.Unlock()
 }
