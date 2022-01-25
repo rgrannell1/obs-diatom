@@ -271,13 +271,18 @@ func (conn *ObsidianDB) GetOutDegree() (*sql.Rows, error) {
 /*
  * Insert a degree row into the database
  */
-func (conn *ObsidianDB) InsertInDegree(tx *sql.Tx, rows *sql.Rows) error {
+func (conn *ObsidianDB) InsertInDegree(rows *sql.Rows) error {
+	tx, err := conn.Db.Begin()
+	if err != nil {
+		return err
+	}
+
 	file := struct {
 		in_degree int
 		id        string
 	}{}
 
-	err := rows.Scan(&file.in_degree, &file.id)
+	err = rows.Scan(&file.in_degree, &file.id)
 	if err != nil {
 		return err
 	}
@@ -288,19 +293,28 @@ func (conn *ObsidianDB) InsertInDegree(tx *sql.Tx, rows *sql.Rows) error {
 	where id = ?
 	`, file.in_degree, file.id)
 
-	return nil
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 /*
  *
  */
-func (conn *ObsidianDB) InsertOutDegree(tx *sql.Tx, rows *sql.Rows) error {
+func (conn *ObsidianDB) InsertOutDegree(rows *sql.Rows) error {
+	tx, err := conn.Db.Begin()
+	if err != nil {
+		return err
+	}
+
 	file := struct {
 		out_degree int
 		id         string
 	}{}
 
-	err := rows.Scan(&file.out_degree, &file.id)
+	err = rows.Scan(&file.out_degree, &file.id)
 	if err != nil {
 		return err
 	}
@@ -311,7 +325,11 @@ func (conn *ObsidianDB) InsertOutDegree(tx *sql.Tx, rows *sql.Rows) error {
 	where id = ?
 	`, file.out_degree, file.id)
 
-	return nil
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 /*
@@ -323,28 +341,17 @@ func (conn *ObsidianDB) AddInDegree() error {
 		return err
 	}
 
-	if err != nil {
-		return err
-	}
-
-	tx, _ := conn.Db.Begin()
 	count := 0
 
 	for rows.Next() {
 		count++
-		if err = conn.InsertInDegree(tx, rows); err != nil {
+		if err = conn.InsertInDegree(rows); err != nil {
 			return err
 		}
 	}
 
 	if count == 0 {
 		return errors.New("no files present in database")
-	}
-
-	err = tx.Commit()
-
-	if err != nil {
-		return err
 	}
 
 	err = rows.Close()
@@ -368,23 +375,16 @@ func (conn *ObsidianDB) AddOutDegree() error {
 		return err
 	}
 
-	tx, _ := conn.Db.Begin()
 	count := 0
 
 	for rows.Next() {
-		if err = conn.InsertOutDegree(tx, rows); err != nil {
+		if err = conn.InsertOutDegree(rows); err != nil {
 			return err
 		}
 	}
 
 	if count == 0 {
 		return errors.New("no files present in database")
-	}
-
-	err = tx.Commit()
-
-	if err != nil {
-		return err
 	}
 
 	err = rows.Close()

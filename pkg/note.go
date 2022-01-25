@@ -119,93 +119,88 @@ func HashContent(text string) uint32 {
 	return hash.Sum32()
 }
 
-func (note *ObsidianNote) Write(conn *ObsidianDB, errors chan<- error) {
+/*
+ * Write notes to Obsidian
+ *
+ */
+func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 	fpath := note.fpath
+	errors := make(chan error)
 	bodyData := note.data
 
+	defer close(errors)
+
 	if bodyData == nil {
-		return
+		return errors
 	}
 
-	err := conn.DeleteTag(fpath)
-	if err != nil {
-		errors <- err
-		return
-	}
-	err = conn.DeleteMetadata(fpath)
-	if err != nil {
-		errors <- err
-		return
-	}
-	err = conn.DeleteTag(fpath)
-	if err != nil {
-		errors <- err
-		return
-	}
-	err = conn.DeleteWikilink(fpath)
-	if err != nil {
-		errors <- err
-		return
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(5)
-
-	// insert file
-	go func(errors chan<- error) {
+	insertFile := func(wg *sync.WaitGroup, errors chan<- error) {
 		defer wg.Done()
 
-		err := conn.InsertFile(fpath, bodyData.Title, fmt.Sprint(bodyData.Hash))
-		if err != nil {
-			panic(err)
+		if err := conn.InsertFile(fpath, bodyData.Title, fmt.Sprint(bodyData.Hash)); err != nil {
+			errors <- err
 		}
-	}(errors)
-
-	// insert tags
-	go func(errors chan<- error) {
-		defer wg.Done()
-
-		err := conn.InsertTags(bodyData, fpath)
-		if err != nil {
-			panic(err)
-		}
-	}(errors)
-
-	// insert url
-	go func(errors chan<- error) {
-		defer wg.Done()
-
-		err := conn.InsertUrl(bodyData, fpath)
-		if err != nil {
-			panic(err)
-		}
-	}(errors)
-
-	// insert wikilink
-	go func(errors chan<- error) {
-		defer wg.Done()
-
-		err := conn.InsertWikilinks(bodyData, fpath)
-		if err != nil {
-			panic(err)
-		}
-	}(errors)
-
-	// insert frontmatter
-	go func(errors chan<- error) {
-		defer wg.Done()
-
-		err := conn.InsertFrontmatter(note.frontMatter, fpath)
-		if err != nil {
-			panic(err)
-		}
-	}(errors)
-
-	wg.Wait()
-
-	if err != nil {
-		panic(err)
 	}
+
+	insertTags := func(wg *sync.WaitGroup, errors chan<- error) {
+		defer wg.Done()
+
+		if err := conn.InsertTags(bodyData, fpath); err != nil {
+			errors <- err
+		}
+	}
+
+	insertUrls := func(wg *sync.WaitGroup, errors chan<- error) {
+		defer wg.Done()
+
+		if err := conn.InsertUrl(bodyData, fpath); err != nil {
+			errors <- err
+		}
+	}
+
+	insertWikilinks := func(wg *sync.WaitGroup, errors chan<- error) {
+		defer wg.Done()
+
+		if err := conn.InsertWikilinks(bodyData, fpath); err != nil {
+			errors <- err
+		}
+	}
+
+	insertFrontmatter := func(wg *sync.WaitGroup, errors chan<- error) {
+		defer wg.Done()
+
+		if err := conn.InsertFrontmatter(note.frontMatter, fpath); err != nil {
+			errors <- err
+		}
+	}
+
+	deleteExisting := func(errors chan<- error) {
+		if err := conn.DeleteTag(fpath); err != nil {
+			errors <- err
+		} else if err := conn.DeleteMetadata(fpath); err != nil {
+			errors <- err
+		} else if err := conn.DeleteWikilink(fpath); err != nil {
+			errors <- err
+		}
+	}
+
+	// delete existing entries, and insert entries
+	go func() {
+		deleteExisting(errors)
+
+		var wg sync.WaitGroup
+		wg.Add(5)
+
+		go insertFile(&wg, errors)
+		go insertTags(&wg, errors)
+		go insertUrls(&wg, errors)
+		go insertWikilinks(&wg, errors)
+		go insertFrontmatter(&wg, errors)
+
+		wg.Wait()
+	}()
+
+	return errors
 }
 
 /*
@@ -337,12 +332,13 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
 
 			// -- a special code-block containing application-readable data
 			if isLabelledCodeBlock := len(info) > 0 && info[0] == '!'; isLabelledCodeBlock {
-				json, err := yamlToJson(string(leaf.Literal))
+				content := string(leaf.Literal)
+				json, err := yamlToJson(content)
 
 				if err != nil {
 					errChan <- &CodedError{
 						ERR_JSON_TO_MARKDOWN,
-						errors.New(note.fpath + "\n" + err.Error()),
+						errors.New(note.fpath + "\n" + err.Error() + "\n" + content),
 					}
 
 					return ast.GoToNext

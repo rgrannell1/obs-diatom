@@ -73,7 +73,7 @@ Description:
   Extract structured data from an Obsidian vault into a sqlite database.
 
 Options:
-  --dbpath <dbpath>    the path the diatom sqlite database [default: ` + dbPath + `]
+  --dbpath <dbpath>       the path the diatom sqlite database [default: ` + dbPath + `]
 
 License:
 	The MIT License
@@ -96,3 +96,9 @@ License:
 	SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 `
 }
+
+const COUNT_FAILED_WALK = "count/failed_walk"
+const COUNT_FAILED_EXTRACTION = "count/failed_extraction"
+const COUNT_EXTRACT_NOTE = "count/extract_note"
+const COUNT_NOTE_CACHED = "count/note_cached"
+const COUNT_NOTE_UPDATED = "count/note_updated"

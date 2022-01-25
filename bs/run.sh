@@ -2,4 +2,4 @@
 
 source "$(pwd)/bs/build.sh"
 
-$DIATOM "$DIR_OBSIDIAN"
+$GO_BIN run -race . "$DIR_OBSIDIAN"

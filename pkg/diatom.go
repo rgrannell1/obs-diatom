@@ -1,6 +1,8 @@
 package diatom
 
 import (
+	"sync"
+
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/pkg/errors"
 )
@@ -20,9 +22,16 @@ func Diatom(args *DiatomArgs) error {
 		return errors.Wrap(err, "failure creating tables")
 	}
 
+	stats := Stats{
+		Data: map[string]int{},
+		Lock: &sync.Mutex{},
+	}
+
+	// extract information for each note into the database
 	extractors := ExtractWorkers{
+		Stats: &stats,
 		Count: WORKER_COUNT,
-		Jobs:  make(chan string, 1_024),
+		Jobs:  make(chan string, 0),
 	}
 
 	vault := ObsidianVault{dpath: args.Dir}
@@ -35,10 +44,14 @@ func Diatom(args *DiatomArgs) error {
 		panic(err)
 	}
 
-	graphers := GraphWorker{}
+	graphers := GraphWorker{
+		Stats: &stats,
+	}
 	graphers.Start(&conn)
 
-	removers := RemoveWorker{}
+	removers := RemoveWorker{
+		Stats: &stats,
+	}
 	removers.Start(&conn)
 
 	return nil

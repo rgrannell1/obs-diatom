@@ -11,8 +11,66 @@ import (
  *
  */
 type ExtractWorkers struct {
+	Stats *Stats
 	Jobs  chan string
 	Count int
+}
+
+/*
+ * take the channel, read jobs, write metadata to sqlite.
+ *
+ */
+func (work *ExtractWorkers) AnalyseNote(conn *ObsidianDB) <-chan error {
+	errChan := make(chan error)
+
+	// writes to errchan
+	go func() {
+		defer close(errChan)
+
+		// extract information for each file
+		for fpath := range work.Jobs {
+			work.Stats.Add(COUNT_EXTRACT_NOTE)
+			note := NewNote(fpath)
+
+			// walk through markdown note
+			walkFailed := false
+			for err := range note.Walk(conn) {
+				walkFailed = true
+				errChan <- err
+			}
+
+			// note extraction failed, ignore this note.
+			if walkFailed {
+				work.Stats.Add(COUNT_FAILED_WALK)
+				continue
+			}
+
+			// extract data from the note
+			done, err := note.ExtractData(conn)
+
+			if err != nil {
+				work.Stats.Add(COUNT_FAILED_EXTRACTION)
+				errChan <- errors.Wrap(err, "failure extracting data")
+				continue
+			}
+
+			// if we have analysed this file-hash already; assume the
+			// database contains all relevant information for this file
+			if done {
+				work.Stats.Add(COUNT_NOTE_CACHED)
+				continue
+			} else {
+				work.Stats.Add(COUNT_NOTE_UPDATED)
+			}
+
+			// sends errors to errChan
+			for err := range note.Write(conn) {
+				errChan <- err
+			}
+		}
+	}()
+
+	return errChan
 }
 
 /*
@@ -25,12 +83,15 @@ func (work *ExtractWorkers) Start(conn *ObsidianDB, markdownFiles []string) <-ch
 
 	results := make(chan error, work.Count)
 
+	// wait to start note extractors
 	go func() {
-		// start workers to process files, feed errorsChan into an aggregator channel
+		defer close(results)
+
+		// start workers to process files, and feed erros into a aggregated error channel
 		for procId := 0; procId < work.Count; procId++ {
 			// start extract worker, forward results
 			go func() {
-				for err := range ExtractNoteData(conn, work.Jobs) {
+				for err := range work.AnalyseNote(conn) {
 					results <- err
 				}
 
@@ -39,72 +100,25 @@ func (work *ExtractWorkers) Start(conn *ObsidianDB, markdownFiles []string) <-ch
 		}
 
 		wg.Wait()
-		close(results)
 	}()
 
+	// write each file to the work channel without blocking
 	go func() {
-		// write each file to a channel
+		defer close(work.Jobs)
+
 		for _, fpath := range markdownFiles {
 			work.Jobs <- fpath
 		}
-		close(work.Jobs)
 	}()
 
 	return results
 }
 
-/*
- * take the channel, read jobs, write metadata to sqlite.
- *
- */
-func ExtractNoteData(conn *ObsidianDB, fpaths <-chan string) <-chan error {
-	errChan := make(chan error)
-
-	// writes to errchan
-	go func() {
-		defer close(errChan)
-
-		// extract information for each file
-		for fpath := range fpaths {
-			note := NewNote(fpath)
-
-			// walk through markdown note
-			walkFailed := false
-			for err := range note.Walk(conn) {
-				walkFailed = true
-				errChan <- err
-			}
-
-			// note extraction failed, ignore this note.
-			if walkFailed {
-				continue
-			}
-
-			// extract data from the note
-			done, err := note.ExtractData(conn)
-
-			if err != nil {
-				errChan <- errors.Wrap(err, "failure extracting data")
-				continue
-			}
-
-			// if we have analysed this file-hash already; assume the
-			// database contains all relevant information for this file
-			if done {
-				continue
-			}
-
-			// sends errors to errChan
-			note.Write(conn, errChan)
-		}
-	}()
-
-	return errChan
-}
-
 // ================================================ //
 
-type GraphWorker struct{}
+type GraphWorker struct {
+	Stats *Stats
+}
 
 /*
  * Start worker to compute and save in & out degree for each
@@ -141,7 +155,9 @@ func (worker *GraphWorker) Start(conn *ObsidianDB) {
 
 // ================================================ //
 
-type RemoveWorker struct{}
+type RemoveWorker struct {
+	Stats *Stats
+}
 
 /*
  * Start worker to remove deleted files
