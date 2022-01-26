@@ -4,3 +4,4 @@ diatom.sqlite
 note.py
 opal.py
 vault.py
+db-export/

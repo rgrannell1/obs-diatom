@@ -100,7 +100,7 @@ func FindWikilinks(body string) []*Wikilink {
 
 // Find tags
 func FindTags(body string) []string {
-	tagPattern := regexp.MustCompile(`\#[a-zA-Z_]+`)
+	tagPattern := regexp.MustCompile(`\#[a-zA-Z_\/]+`)
 
 	return tagPattern.FindAllString(body, -1)
 }
