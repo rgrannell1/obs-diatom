@@ -128,8 +128,6 @@ func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 	errors := make(chan error)
 	bodyData := note.data
 
-	defer close(errors)
-
 	if bodyData == nil {
 		return errors
 	}
@@ -176,6 +174,14 @@ func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 		}
 	}
 
+	insertHeadings := func(wg *sync.WaitGroup, errors chan<- error) {
+		defer wg.Done()
+
+		if err := conn.InsertHeadings(bodyData, fpath); err != nil {
+			errors <- err
+		}
+	}
+
 	deleteExisting := func(errors chan<- error) {
 		if err := note.Delete(conn); err != nil {
 			errors <- err
@@ -186,16 +192,19 @@ func (note *ObsidianNote) Write(conn *ObsidianDB) <-chan error {
 
 	// delete existing entries, and replace entries
 	go func() {
+		defer close(errors)
+
 		deleteExisting(errors)
 
 		var wg sync.WaitGroup
-		wg.Add(5)
+		wg.Add(6)
 
 		go insertFile(&wg, errors)
 		go insertTags(&wg, errors)
 		go insertUrls(&wg, errors)
 		go insertWikilinks(&wg, errors)
 		go insertFrontmatter(&wg, errors)
+		go insertHeadings(&wg, errors)
 
 		wg.Wait()
 	}()
@@ -267,15 +276,28 @@ func (note *ObsidianNote) ExtractData(conn *ObsidianDB) (bool, error) {
 		body = text[bounds[1]:]
 	}
 
-	note.data = &MarkdownData{
-		Title:     note.FindTitle(),
-		Wikilinks: FindWikilinks(body),
-		Tags:      FindTags(body),
-		Urls:      FindUrls(body),
-		Hash:      HashContent(text),
+	if note.data == nil {
+		note.data = &MarkdownData{}
 	}
 
+	note.data.Title = note.FindTitle()
+	note.data.Wikilinks = FindWikilinks(body)
+	note.data.Tags = FindTags(body)
+	note.data.Urls = FindUrls(body)
+	note.data.Hash = HashContent(text)
+
 	return false, nil
+}
+
+/*
+ * Set headings data
+ */
+func (note *ObsidianNote) SetHeadings(headings []Heading) {
+	if note.data == nil {
+		note.data = &MarkdownData{}
+	}
+
+	note.data.Headings = headings
 }
 
 /*
@@ -288,6 +310,11 @@ func (note *ObsidianNote) Parse() (ast.Node, error) {
 	}
 
 	return parser.New().Parse(content), nil
+}
+
+type Heading struct {
+	Level int
+	Text  string
 }
 
 func yamlToJson(src string) (string, error) {
@@ -317,7 +344,52 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
 		errChan <- err
 	}
 
-	// traverse markdown document using this function
+	// Read code-blocks from the document
+	readCodeBlock := func(node ast.Node) ast.WalkStatus {
+		leaf := node.AsLeaf()
+
+		info := string(node.(*ast.CodeBlock).Info)
+
+		// -- a special code-block containing application-readable data
+		if isLabelledCodeBlock := len(info) > 0 && info[0] == '!'; isLabelledCodeBlock {
+			content := string(leaf.Literal)
+			json, err := yamlToJson(content)
+
+			if err != nil {
+				errChan <- &CodedError{
+					ERR_JSON_TO_MARKDOWN,
+					errors.New(note.fpath + "\n" + err.Error() + "\n" + content),
+				}
+
+				return ast.GoToNext
+			}
+
+			if err := conn.InsertMetadata(tx, note.fpath, info, json); err != nil {
+				errChan <- err
+				return ast.GoToNext
+			}
+		}
+		return ast.GoToNext
+	}
+
+	headings := []Heading{}
+
+	// read headings from the document
+	readHeading := func(node ast.Node) ast.WalkStatus {
+		heading := node.(*ast.Heading)
+
+		child := heading.Children[0]
+		text := string(child.AsLeaf().Literal)
+
+		headings = append(headings, Heading{
+			Level: heading.Level,
+			Text:  text,
+		})
+
+		return ast.GoToNext
+	}
+
+	// traverse markdown document using this walk function
 	processMarkdownNode := func(node ast.Node, entering bool) ast.WalkStatus {
 		if err != nil {
 			errChan <- err
@@ -326,50 +398,36 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
 		// parse through markdown document
 		switch node.(type) {
 		case *ast.CodeBlock:
-			leaf := node.AsLeaf()
-
-			info := string(node.(*ast.CodeBlock).Info)
-
-			// -- a special code-block containing application-readable data
-			if isLabelledCodeBlock := len(info) > 0 && info[0] == '!'; isLabelledCodeBlock {
-				content := string(leaf.Literal)
-				json, err := yamlToJson(content)
-
-				if err != nil {
-					errChan <- &CodedError{
-						ERR_JSON_TO_MARKDOWN,
-						errors.New(note.fpath + "\n" + err.Error() + "\n" + content),
-					}
-
-					return ast.GoToNext
-				}
-
-				if err := conn.InsertMetadata(tx, note.fpath, info, json); err != nil {
-					errChan <- err
-					return ast.GoToNext
-				}
+			return readCodeBlock(node)
+		case *ast.Heading:
+			if entering {
+				return readHeading(node)
 			}
 		}
 
 		return ast.GoToNext
 	}
 
-	// walk through markdown tree and store information about each note
-	// into a database
+	// walk through markdown tree and store information about each note into a database
 	go func() {
+		defer close(errChan)
+
 		ast.WalkFunc(doc, processMarkdownNode)
+		note.SetHeadings(headings)
 
 		// commit changes after walk is complete
 		if err = tx.Commit(); err != nil {
 			errChan <- err
 		}
-
-		close(errChan)
 	}()
 
 	return errChan
 }
 
+/*
+ * Does a note exist?
+ *
+ */
 func (note *ObsidianNote) Exists() (bool, error) {
 	_, err := os.Stat(note.fpath)
 	if err == nil {

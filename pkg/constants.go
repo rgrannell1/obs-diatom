@@ -21,6 +21,7 @@ type MarkdownData struct {
 	Tags      []string
 	Urls      []string
 	Hash      uint32
+	Headings  []Heading
 }
 
 // Obsidian database structure

@@ -97,6 +97,18 @@ func (conn *ObsidianDB) CreateTables() error {
 		return err
 	}
 
+	_, err = tx.Exec(`create table if not exists heading (
+		heading  text not null,
+		level    integer not null,
+		file_id  text not null,
+
+		primary key(heading, level, file_id)
+	)`)
+
+	if err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
@@ -405,6 +417,27 @@ func (conn *ObsidianDB) InsertMetadata(tx *sql.Tx, fpath, info, yaml string) err
 	`, fpath, info, yaml)
 
 	return err
+}
+
+/*
+ * Insert headings into sqlite
+ */
+func (conn *ObsidianDB) InsertHeadings(bodyData *MarkdownData, fpath string) error {
+	tx, err := conn.Db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, heading := range bodyData.Headings {
+		_, err := tx.Exec(`insert or replace into heading (heading, level, file_id) values (?, ?, ?)`, heading.Text, heading.Level, fpath)
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 /*
