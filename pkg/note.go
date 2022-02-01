@@ -329,6 +329,7 @@ func yamlToJson(src string) (string, error) {
 
 /*
  * Walk through note and collect interesting information
+ *
  */
 func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
 	errChan := make(chan error)
