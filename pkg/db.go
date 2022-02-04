@@ -90,7 +90,7 @@ func (conn *ObsidianDB) CreateTables() error {
 		schema   text not null,
 		content  text not null,
 
-		primary key(content)
+		primary key(file_id, content)
 	)`)
 
 	if err != nil {

@@ -134,20 +134,3 @@ func (worker *GraphWorker) Start(conn *ObsidianDB) {
 		panic(err)
 	}
 }
-
-// ================================================ //
-
-type RemoveWorker struct {
-	Stats *Stats
-}
-
-/*
- * Start worker to remove deleted files
- *
- */
-func (work *RemoveWorker) Start(conn *ObsidianDB) {
-	// remove files that do not exist
-	for err := range RemoveDeletedFiles(conn) {
-		panic(err)
-	}
-}
