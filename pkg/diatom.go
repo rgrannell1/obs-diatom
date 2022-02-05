@@ -44,11 +44,6 @@ func Diatom(args *DiatomArgs) error {
 	}
 	graphers.Start(&conn)
 
-	removers := RemoveWorker{
-		Stats: stats,
-	}
-	removers.Start(&conn)
-
 	return nil
 }
 
