@@ -22,6 +22,11 @@ func Diatom(args *DiatomArgs) error {
 
 	stats := NewStats()
 
+	removeWorker := RemoveWorker{
+		Stats: stats,
+	}
+	removeWorker.Start(&conn)
+
 	// extract information for each note into the database
 	extractors := ExtractWorkers{
 		Stats: stats,

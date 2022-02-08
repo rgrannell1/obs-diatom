@@ -134,3 +134,47 @@ func (worker *GraphWorker) Start(conn *ObsidianDB) {
 		panic(err)
 	}
 }
+
+type RemoveWorker struct {
+	Stats *Stats
+}
+
+/*
+ *
+ */
+func (worker *RemoveWorker) Start(conn *ObsidianDB) {
+	// find removed files and delete
+
+	fpaths, err := conn.GetFileIds()
+	if err != nil {
+		panic(err)
+	}
+
+	tgts := []string{}
+
+	for _, fpath := range fpaths {
+		note := NewNote(fpath)
+		exists, err := note.Exists()
+		if err != nil {
+			panic(err)
+		}
+
+		if !exists {
+			tgts = append(tgts, fpath)
+			err = note.Delete(conn)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+
+	for _, fpath := range tgts {
+		note := NewNote(fpath)
+		tgts = append(tgts, fpath)
+
+		err = note.Delete(conn)
+		if err != nil {
+			panic(err)
+		}
+	}
+}

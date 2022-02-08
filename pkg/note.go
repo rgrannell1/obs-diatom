@@ -357,10 +357,7 @@ func (note *ObsidianNote) Walk(conn *ObsidianDB) <-chan error {
 			json, err := yamlToJson(content)
 
 			if err != nil {
-				errChan <- &CodedError{
-					ERR_JSON_TO_MARKDOWN,
-					errors.New(note.fpath + "\n" + err.Error() + "\n" + content),
-				}
+				errChan <- errors.New(note.fpath + "\n" + err.Error() + "\n" + content)
 
 				return ast.GoToNext
 			}

@@ -47,6 +47,7 @@ type ObsidianVault struct {
 	dpath string
 }
 
+// Markdown note content
 type File struct {
 	id    string
 	title string

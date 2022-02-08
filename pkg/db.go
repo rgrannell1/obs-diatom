@@ -25,7 +25,7 @@ func (conn *ObsidianDB) Close() error {
 }
 
 /*
- * Create table
+ * Create tables
  */
 func (conn *ObsidianDB) CreateTables() error {
 	// create a file table
